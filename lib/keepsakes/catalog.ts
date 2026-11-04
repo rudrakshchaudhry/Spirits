@@ -136,15 +136,15 @@ export function namesKeepsake(text: string, type: string): boolean {
   return pluralForms(keyNoun(type)).some((f) => ws.includes(f));
 }
 
-/** Does the text name a DIFFERENT, more specific keepsake (e.g. "gum leaf" when the wish is "leaf")? */
+/**
+ * Does the text name a SIBLING keepsake — one sharing our noun, like a pine cone
+ * when the wish is a cypress cone? Other keepsakes ("coffee beans", "sea shell")
+ * are normal scenery words in a riddle and don't count as drift.
+ */
 export function namesOtherKeepsake(text: string, type: string): boolean {
   const ws = words(text);
   const mine = keepsake(type).label.toLowerCase();
-  return Object.keys(KEEPSAKES).some((t) => {
-    if (t === type || labelWords(t).length < 2) return false; // single generic words occur naturally
-    if (mine.includes(keepsake(t).label.toLowerCase())) return false;
-    return hasLabelPhrase(ws, t);
-  });
+  return siblingsOf(type).some((t) => labelWords(t).length >= 2 && !mine.includes(keepsake(t).label.toLowerCase()) && hasLabelPhrase(ws, t));
 }
 
 /** Plain template riddles that always name the keepsake. */

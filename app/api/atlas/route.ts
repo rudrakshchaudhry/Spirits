@@ -58,7 +58,7 @@ export async function GET(req: Request) {
   // Explored % per neighbourhood = chunks walked / land chunks (spec §4.3)
   const [{ data: explored }, inventory] = await Promise.all([
     supabaseAdmin().from("explored_chunks").select("neighborhood").eq("player_id", player.id),
-    inventoryOf(player.id),
+    inventoryOf(player.id).catch(() => ({}) as Record<string, number>),
   ]);
   const walked: Record<string, number> = {};
   for (const e of explored ?? []) if (e.neighborhood) walked[e.neighborhood] = (walked[e.neighborhood] ?? 0) + 1;

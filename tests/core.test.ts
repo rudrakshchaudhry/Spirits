@@ -254,6 +254,13 @@ describe("wish riddles point at the keepsake", () => {
     const { checkRiddles } = await import("@/lib/keepsakes/catalog");
     const [a] = checkRiddles("Find the eucalyptus leaf by the creek", "and bring me the leaf", "leaf");
     expect(a).toMatch(/Somewhere across the city lies a leaf/);
+    // other keepsakes as scenery words are fine
+    const ok = checkRiddles("Where coffee beans are ground at dawn…", "a pastry crumb left on the counter", "crumb");
+    expect(ok[0]).toBe("Where coffee beans are ground at dawn…");
+  });
+  it("pins the stack cap shared with SQL (claim_glint, grant_keepsake, inventory CHECK)", async () => {
+    const { MAX_STACK } = await import("@/lib/keepsakes/catalog");
+    expect(MAX_STACK).toBe(20); // change supabase/migrations claim_glint + inventory check together
   });
   it("replaces drifted riddles with templates and strips markdown", async () => {
     const { checkRiddles, withArticle } = await import("@/lib/keepsakes/catalog");

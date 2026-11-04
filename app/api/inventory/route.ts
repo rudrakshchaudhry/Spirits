@@ -8,13 +8,13 @@ export async function GET(req: Request) {
   const player = await playerFrom(req);
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
   const [items, { data: claims, error }] = await Promise.all([
-    inventoryOf(player.id),
+    inventoryOf(player.id).catch(() => null),
     supabaseAdmin()
       .from("pickups_claimed")
       .select("glint_id")
       .eq("player_id", player.id)
       .gte("window_start", windowStart(windowIndex() - 1)),
   ]);
-  if (error) return NextResponse.json({ error: "couldn't open your pockets — try again" }, { status: 500 });
+  if (error || !items) return NextResponse.json({ error: "couldn't open your pockets — try again" }, { status: 500 });
   return NextResponse.json({ items, claimed: (claims ?? []).map((c) => c.glint_id) });
 }

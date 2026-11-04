@@ -1,64 +1,50 @@
 import { NextResponse } from "next/server";
-import { conditionKeepsakes } from "@/lib/conditions/rules";
-import { keepsake, withArticle } from "@/lib/keepsakes/catalog";
-import { chunkHood, glintsForChunk, parseGlintId, windowIndex, windowStart } from "@/lib/keepsakes/glints";
+import { condKey, conditionKeepsakes } from "@/lib/conditions/rules";
+import { tagsFor } from "@/lib/conditions/server";
+import { MAX_STACK, keepsake, withArticle } from "@/lib/keepsakes/catalog";
+import { glintsForChunk, parseGlintId, windowIndex, windowStart } from "@/lib/keepsakes/glints";
 import { openWishTypes } from "@/lib/keepsakes/server";
-import { EXPLORE_LIMITS, admitChunks } from "@/lib/social/explore";
+import { ensurePresence } from "@/lib/social/presence";
 import { sfDate } from "@/lib/spirits/spawn";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 import { chunkEntities } from "@/lib/world/query";
 
-/** A glint's chunk must have been visited this recently (spec §10: "collected by walking over them"). */
-const PRESENCE_MS = 15 * 60_000;
-/** Every condition keepsake: a glint seen under fog/rain/night/blossom stays claimable if the weather flips mid-pickup. */
-const ALL_CONDITION_KEEPSAKES = conditionKeepsakes(["night", "fog", "rain", "blossom"]);
-
 /**
- * POST /api/pickup { glintId } → { type, qty, wishedBy }
- * Recomputes the deterministic glint to validate it (nothing stored about
- * glints), requires the chunk to have been walked through recently (paced by
- * the same budget as exploration, so ids can't be farmed citywide), then claims
- * it once per player per window — claim + grant are one transaction.
+ * POST /api/pickup { glintId, cond? } → { type, label, qty, wishedBy }
+ * Recomputes the deterministic glint under the REAL current conditions (so
+ * night/fog/rain glints only exist when they should), requires the player to be
+ * plausibly at the chunk (lib/social/presence), then claims it once per player
+ * per window — claim + grant are one transaction (claim_glint).
  */
 export async function POST(req: Request) {
   const player = await playerFrom(req);
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
-  const { glintId } = (await req.json().catch(() => ({}))) as { glintId?: string };
+  const { glintId, cond: forced } = (await req.json().catch(() => ({}))) as { glintId?: string; cond?: string };
   const parsed = glintId ? parseGlintId(glintId) : null;
   if (!parsed) return NextResponse.json({ error: "bad glint" }, { status: 400 });
   // current window, or the previous one (grace for players standing on it at the turnover)
   const now = windowIndex();
   if (parsed.win !== now && parsed.win !== now - 1) return NextResponse.json({ error: "that glint has faded" }, { status: 410 });
 
-  // Glints come from place keepsake types + positions (date- and weather-independent) plus condition extras.
-  const chunk = await chunkEntities(parsed.key, sfDate(), "");
-  const glint = glintsForChunk(parsed.key, chunk.entities, parsed.win, { extra: ALL_CONDITION_KEEPSAKES }).find((g) => g.id === glintId);
+  // forced conditions are only honoured on dev/demo builds (tagsFor checks)
+  const { tags, cond } = await tagsFor(forced ?? null);
+  const chunk = await chunkEntities(parsed.key, sfDate(), condKey(tags));
+  const glint = glintsForChunk(parsed.key, chunk.entities, parsed.win, { extra: conditionKeepsakes(tags, cond.phase) }).find((g) => g.id === glintId);
   if (!glint) return NextResponse.json({ error: "nothing here" }, { status: 404 });
 
-  // Presence: the chunk must count as visited, through the exploration pace budget.
-  const sb = supabaseAdmin();
-  const since = new Date(Date.now() - PRESENCE_MS).toISOString();
-  const { data: visit } = await sb.from("explored_chunks").select("last_at").eq("player_id", player.id).eq("chunk_key", parsed.key).maybeSingle();
-  if (!visit || visit.last_at < since) {
-    const { count: recentNew } = await sb
-      .from("explored_chunks")
-      .select("*", { count: "exact", head: true })
-      .eq("player_id", player.id)
-      .gte("first_at", new Date(Date.now() - EXPLORE_LIMITS.windowMs).toISOString());
-    const { revisits, fresh } = admitChunks([parsed.key], new Set(visit ? [parsed.key] : []), recentNew ?? 0);
-    if (!revisits.length && !fresh.length) return NextResponse.json({ error: "slow down, wanderer — you're moving faster than your feet" }, { status: 429 });
-    await sb
-      .from("explored_chunks")
-      .upsert({ player_id: player.id, chunk_key: parsed.key, neighborhood: chunkHood(parsed.key), last_at: new Date().toISOString() }, { onConflict: "player_id,chunk_key" });
-  }
+  const presence = await ensurePresence(player.id, parsed.key);
+  if (!presence.ok) return NextResponse.json({ error: presence.error }, { status: presence.status });
 
-  const { data, error } = await sb.rpc("claim_glint", { p_player: player.id, p_glint: glint.id, p_window: windowStart(parsed.win), p_type: glint.type });
+  // claim (atomic) and the wish hint run together
+  const [{ data, error }, wishes] = await Promise.all([
+    supabaseAdmin().rpc("claim_glint", { p_player: player.id, p_glint: glint.id, p_window: windowStart(parsed.win), p_type: glint.type }),
+    openWishTypes(player.id).catch(() => new Map<string, string[]>()),
+  ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const r = data as { result: string; qty?: number };
   if (r.result === "claimed") return NextResponse.json({ error: "already picked up" }, { status: 409 });
   if (r.result === "full") {
-    return NextResponse.json({ error: `your pocket for ${keepsake(glint.type).label}s is full — gift or trade some first`, full: true }, { status: 409 });
+    return NextResponse.json({ error: `you can't carry more than ${MAX_STACK} × ${keepsake(glint.type).label} — gift or trade some first`, full: true }, { status: 409 });
   }
-  const wishes = await openWishTypes(player.id).catch(() => new Map<string, string[]>());
   return NextResponse.json({ type: glint.type, label: withArticle(keepsake(glint.type).label), qty: r.qty, full: false, wishedBy: wishes.get(glint.type) ?? [] });
 }
