@@ -1,4 +1,5 @@
 import { INDEX, es } from "@/lib/es/client";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { hash32 } from "@/lib/spirits/spawn";
 import type { RhythmGame } from "@/lib/encounter/games";
 
@@ -50,4 +51,45 @@ export function metersBetween(a: { lat: number; lon: number }, b: { lat: number;
 /** Everyone at a gathering plays the same pattern (co-op rhythm, spec §14.3). */
 export function coopGame(e: GatheringEvent): RhythmGame {
   return { type: "rhythm", title: "Gathering song", bpm: 104, notes: 24, seed: hash32(e.id), difficulty: 0.4, flavor: "Everyone here plays the same song — the team score is the average." };
+}
+
+/** Co-op result: settled once min_players have played; only the FIRST min_players scores count (final). */
+export async function gatheringResult(eventId: string, minPlayers: number) {
+  const { data, error } = await supabaseAdmin()
+    .from("gathering_scores")
+    .select("player_id,score,played_at")
+    .eq("event_id", eventId)
+    .order("played_at", { ascending: true })
+    .order("player_id", { ascending: true });
+  if (error) throw new Error(error.message);
+  const all = data ?? [];
+  const counted = all.slice(0, minPlayers);
+  const avg = counted.length ? counted.reduce((a, s) => a + s.score, 0) / counted.length : null;
+  const result: "pending" | "success" | "failed" = all.length < minPlayers ? "pending" : avg! >= COOP_PASS ? "success" : "failed";
+  return { result, played: all.length, avg, playerIds: all.map((s) => s.player_id) };
+}
+
+/**
+ * Befriend the gathering spirit for everyone checked in. Idempotent, so it is
+ * safe to retry (the room GET re-runs it after a success), and a transient
+ * failure never loses the reward.
+ */
+export async function awardGathering(e: GatheringEvent) {
+  const sb = supabaseAdmin();
+  const { data: present, error } = await sb.from("gathering_checkins").select("player_id").eq("event_id", e.id).eq("verified", true);
+  if (error) throw new Error(error.message);
+  if (!present?.length) return null;
+  const { getOrCreateCard } = await import("@/lib/spirits/card");
+  const card = await getOrCreateCard(e.place_id, undefined, { variant: "gathering" });
+  const now = new Date().toISOString();
+  const { error: fErr } = await sb.from("friendships").upsert(
+    present.map((p) => ({
+      player_id: p.player_id, spirit_id: card.spirit_id, place_id: card.place_id, family: card.family, rarity: card.rarity,
+      spirit_name: card.name, place_name: card.place_name, neighborhood: card.neighborhood, look: card.look ?? null,
+      sprite_seed: card.sprite_seed, trust: 100, status: "rare", riddles_heard: 0, lore_unlocked: 1, befriended_at: now, last_visit_at: now,
+    })),
+    { onConflict: "player_id,spirit_id", ignoreDuplicates: true },
+  );
+  if (fErr) throw new Error(fErr.message);
+  return card;
 }

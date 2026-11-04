@@ -19,13 +19,14 @@ export async function POST(req: Request) {
   const current = await profileOf(player.id);
 
   const patch: Record<string, unknown> = {};
-  if (body.handle !== undefined && body.handle !== current?.handle) {
-    const h = await checkHandle(String(body.handle));
+  const wantHandle = typeof body.handle === "string" ? body.handle.trim().toLowerCase() : undefined;
+  if (wantHandle !== undefined && wantHandle !== current?.handle) {
+    const h = await checkHandle(wantHandle, player.id);
     if (!h.ok) return NextResponse.json({ error: h.error, field: "handle" }, { status: 400 });
     patch.handle = h.handle;
   }
   if (body.home_hood !== undefined && body.home_hood !== current?.home_hood) {
-    if (!(body.home_hood in CHUNKS_PER_HOOD)) return NextResponse.json({ error: "unknown neighborhood", field: "home_hood" }, { status: 400 });
+    if (typeof body.home_hood !== "string" || !Object.hasOwn(CHUNKS_PER_HOOD, body.home_hood)) return NextResponse.json({ error: "unknown neighborhood", field: "home_hood" }, { status: 400 });
     if (current?.home_hood && current.crew_changed_at && Date.now() - Date.parse(current.crew_changed_at) < 30 * DAY) {
       return NextResponse.json({ error: "you can change crews once every 30 days", field: "home_hood" }, { status: 400 });
     }
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     if (current?.home_hood) patch.crew_changed_at = new Date().toISOString();
   }
   if (body.companion !== undefined) {
-    if (!(body.companion in COMPANIONS)) return NextResponse.json({ error: "pick Mote, Sprig or Tidepip", field: "companion" }, { status: 400 });
+    if (typeof body.companion !== "string" || !Object.hasOwn(COMPANIONS, body.companion)) return NextResponse.json({ error: "pick Mote, Sprig or Tidepip", field: "companion" }, { status: 400 });
     if (current?.companion_species && current.companion_species !== body.companion) {
       return NextResponse.json({ error: "your companion has already chosen you", field: "companion" }, { status: 400 });
     }
