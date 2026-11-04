@@ -25,6 +25,7 @@ export async function openWishTypes(playerId: string): Promise<Map<string, strin
 }
 
 export async function inventoryOf(playerId: string): Promise<Record<string, number>> {
-  const { data } = await supabaseAdmin().from("inventory").select("keepsake_type,qty").eq("player_id", playerId).gt("qty", 0);
+  const { data, error } = await supabaseAdmin().from("inventory").select("keepsake_type,qty").eq("player_id", playerId).gt("qty", 0);
+  if (error) throw new Error(`inventory: ${error.message}`);
   return Object.fromEntries((data ?? []).map((r) => [r.keepsake_type, r.qty]));
 }

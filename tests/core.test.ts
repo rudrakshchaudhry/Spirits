@@ -239,8 +239,28 @@ describe("wish riddles point at the keepsake", () => {
     expect(namesKeepsake("a fallen pinecone", "pine_cone")).toBe(true);
     expect(namesKeepsake("silver eucalyptus leaves whisper", "gum_leaf")).toBe(true);
     expect(namesKeepsake("a comb missing two teeth", "comb_tooth")).toBe(true);
-    expect(namesKeepsake("A _ribbon_ of __silk__", "ribbon")).toBe(true);
+    expect(namesKeepsake("A _florist's ribbon_ of __silk__", "ribbon")).toBe(true);
+    expect(namesKeepsake("a ribbon of silk", "ribbon")).toBe(false); // "hair ribbon" exists → full label needed
     expect(namesKeepsake("a keyhole story", "old_brass_key")).toBe(false);
+    // review fixes: no cross-word compact matches, siblings need the full label
+    expect(namesKeepsake("but tonight the wind", "button")).toBe(false);
+    expect(namesKeepsake("a corn field in summer", "acorn")).toBe(false);
+    expect(namesKeepsake("a fallen pine cone", "cypress_cone")).toBe(false);
+    expect(namesKeepsake("a cypress cone, still sticky", "cypress_cone")).toBe(true);
+    expect(namesKeepsake("an old brass key", "maple_key")).toBe(false);
+    expect(namesKeepsake("a twirling maple key", "maple_key")).toBe(true);
+  });
+  it("rejects riddles that name a different keepsake", async () => {
+    const { checkRiddles } = await import("@/lib/keepsakes/catalog");
+    const [a] = checkRiddles("Find the eucalyptus leaf by the creek", "and bring me the leaf", "leaf");
+    expect(a).toMatch(/Somewhere across the city lies a leaf/);
+    // other keepsakes as scenery words are fine
+    const ok = checkRiddles("Where coffee beans are ground at dawn…", "a pastry crumb left on the counter", "crumb");
+    expect(ok[0]).toBe("Where coffee beans are ground at dawn…");
+  });
+  it("pins the stack cap shared with SQL (claim_glint, grant_keepsake, inventory CHECK)", async () => {
+    const { MAX_STACK } = await import("@/lib/keepsakes/catalog");
+    expect(MAX_STACK).toBe(20); // change supabase/migrations claim_glint + inventory check together
   });
   it("replaces drifted riddles with templates and strips markdown", async () => {
     const { checkRiddles, withArticle } = await import("@/lib/keepsakes/catalog");

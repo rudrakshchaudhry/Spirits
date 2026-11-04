@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   const { data: target } = await sb.from("profiles").select("id").eq("handle", String(body.to ?? "").trim().toLowerCase()).maybeSingle();
   if (!target || target.id === player.id) return NextResponse.json({ error: "no wanderer by that name" }, { status: 404 });
   if (!(await meFor(target.id)).unlocks.trading) return NextResponse.json({ error: "they haven't unlocked trading yet" }, { status: 403 });
-  const inv = await inventoryOf(player.id);
+  const inv = await inventoryOf(player.id).catch(() => ({}) as Record<string, number>);
   for (const [k, n] of Object.entries(offer)) if ((inv[k] ?? 0) < n) return NextResponse.json({ error: "you don't have all of that" }, { status: 400 });
 
   const { data, error } = await sb.from("trades").insert({ from_id: player.id, to_id: target.id, offer, request }).select("id").single();

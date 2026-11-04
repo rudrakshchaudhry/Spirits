@@ -8,7 +8,6 @@ import type { SpiritSpawn } from "@/lib/spirits/spawn";
 import { EntityStore } from "@/lib/world/entityStore";
 import { api } from "@/lib/game/api";
 import { sfx } from "@/lib/game/sfx";
-import { keepsake } from "@/lib/keepsakes/catalog";
 import { type Glint, windowIndex } from "@/lib/keepsakes/glints";
 import type { InventoryResponse } from "@/lib/encounter/types";
 import { type Hood, hoodAt, taglineFor } from "@/lib/world/neighborhoods";
@@ -72,6 +71,7 @@ export class WorldScene extends Phaser.Scene {
   private glints = new Map<string, { g: Glint; img: Phaser.GameObjects.Sprite; x: number; y: number }>();
   private claimed = new Set<string>();
   private pickupPending = new Set<string>();
+  private glintCooldown = new Map<string, number>();
   private glintWindow = windowIndex();
   private lastGlintCheck = 0;
   /** chunks walked through, flushed to /api/explore in small batches */
@@ -546,19 +546,16 @@ export class WorldScene extends Phaser.Scene {
   /** Walk over a glint → claim it (server validates). */
   private checkGlints() {
     for (const [id, gl] of this.glints) {
-      if (this.pickupPending.has(id)) continue;
+      if (this.pickupPending.has(id) || (this.glintCooldown.get(id) ?? 0) > this.time.now) continue;
       if (Math.hypot(gl.x - this.pos.x, gl.y - this.pos.y) > 0.85) continue;
       this.pickupPending.add(id);
       gl.img.setAlpha(0.4);
-      api<{ type: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", {
+      api<{ type: string; label: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", {
         method: "POST",
         body: JSON.stringify({ glintId: id, ...(useGame.getState().forcedCond !== null ? { cond: useGame.getState().forcedCond } : {}) }),
       })
         .then((r) => {
-          const label = keepsake(r.type).label;
-          const text = r.wishedBy.length
-            ? `Picked up a ${label}. ♪ ${r.wishedBy[0]} would love this…`
-            : `Picked up a ${label}${r.full ? " (your pocket for these is full)" : ""}.`;
+          const text = r.wishedBy.length ? `Picked up ${r.label}. ♪ ${r.wishedBy[0]} would love this…` : `Picked up ${r.label}.`;
           useGame.setState({ toast: { text, at: Date.now() } });
           sfx("pickup");
           this.claimed.add(id);
@@ -566,6 +563,13 @@ export class WorldScene extends Phaser.Scene {
           this.glints.delete(id);
         })
         .catch((e: Error) => {
+          if (/carry more|slow down/.test(e.message)) {
+            // don't hammer the server while the player stands on it: one toast, retry in a minute
+            if (!this.glintCooldown.has(id)) useGame.setState({ toast: { text: e.message, at: Date.now() } });
+            this.glintCooldown.set(id, this.time.now + 60_000);
+            gl.img.setAlpha(0.6);
+            return;
+          }
           if (/already|faded|nothing/.test(e.message)) {
             this.claimed.add(id);
             gl.img.destroy();
