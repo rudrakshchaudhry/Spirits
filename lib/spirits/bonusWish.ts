@@ -4,7 +4,7 @@
  * Granting it is a bonus (Atlas star + companion XP), not trust.
  */
 import { z } from "zod";
-import { WISHABLE, ensureRiddleNamesKeepsake, keepsake, stripMarkdown } from "@/lib/keepsakes/catalog";
+import { WISHABLE, checkRiddles, keepsake, templateRiddles } from "@/lib/keepsakes/catalog";
 import { MODELS, flagged, mistral } from "@/lib/mistral/client";
 import { roll } from "./spawn";
 import { type PlaceSrc, type SpiritCard, linkWish } from "./card";
@@ -37,11 +37,8 @@ const Schema = z.object({ theme: z.string().min(3).max(80), riddle_1: z.string()
 
 export async function makeBonusWish(card: SpiritCard, place: PlaceSrc, keepsakeType: string): Promise<BonusWish> {
   const label = keepsake(keepsakeType).label;
-  let theme = `a ${label} from somewhere new`;
-  let riddles: [string, string] = [
-    `${card.name} has a new dream: a ${label}, found where you haven't wandered yet.`,
-    `Try a neighbourhood you rarely visit — a ${label} is waiting there.`,
-  ];
+  let theme = `${label} from somewhere new`;
+  let riddles: [string, string] = templateRiddles(keepsakeType);
   try {
     const call = mistral().chat.complete({
       model: MODELS.persona,
@@ -64,7 +61,7 @@ export async function makeBonusWish(card: SpiritCard, place: PlaceSrc, keepsakeT
     const parsed = Schema.safeParse(JSON.parse(typeof raw === "string" ? raw : ""));
     if (parsed.success && !(await flagged([parsed.data.theme, parsed.data.riddle_1, parsed.data.riddle_2]).catch(() => true))) {
       theme = parsed.data.theme;
-      riddles = [stripMarkdown(parsed.data.riddle_1), ensureRiddleNamesKeepsake(parsed.data.riddle_2, keepsakeType)];
+      riddles = checkRiddles(parsed.data.riddle_1, parsed.data.riddle_2, keepsakeType);
     }
   } catch {
     /* template fallback */

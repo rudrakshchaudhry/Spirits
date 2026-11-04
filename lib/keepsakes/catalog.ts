@@ -82,8 +82,19 @@ export const REFERENCED = [
 
 export const MAX_STACK = 20;
 
-/** Models sometimes add **bold** / *italics*; the game shows plain text. */
-export const stripMarkdown = (s: string) => s.replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1").replace(/\*/g, "").trim();
+/** Models sometimes add **bold** / _italics_; the game shows plain text. */
+export const stripMarkdown = (s: string) =>
+  s
+    .replace(/\*{1,3}([^*]+?)\*{1,3}/g, "$1")
+    .replace(/(^|[\s(])_{1,2}([^_]+?)_{1,2}(?=[\s.,!?;:)]|$)/g, "$1$2")
+    .replace(/\*/g, "")
+    .trim();
+
+/** "a sea shell", "an old brass key", "a eucalyptus leaf" (vowel *sound*, not letter). */
+export function withArticle(label: string): string {
+  const an = /^[aeio]/i.test(label) || (/^u/i.test(label) && !/^(uni|use|usu|ur)/i.test(label));
+  return `${/^(eu|ewe)/i.test(label) ? "a" : an ? "an" : "a"} ${label}`;
+}
 
 /** The word a riddle must use to point at a keepsake: "palm frond" → "frond", "old brass key" → "key". */
 export function keyNoun(type: string): string {
@@ -91,16 +102,35 @@ export function keyNoun(type: string): string {
   return words[words.length - 1] ?? type;
 }
 
-/**
- * Guardrail for wish riddles: the clearer (second) riddle must name the
- * keepsake's key noun (singular or plural). If the model drifted (e.g. book
- * riddles for a palm frond), append a plain hint instead of trusting it.
- */
-export function ensureRiddleNamesKeepsake(raw: string, type: string): string {
-  const riddle = stripMarkdown(raw);
+const IRREGULAR: Record<string, string> = { leaf: "leaves", tooth: "teeth", knife: "knives" };
+
+/** Does the text name this keepsake (key noun, its plurals, or the label written as one word)? */
+export function namesKeepsake(text: string, type: string): boolean {
+  const t = stripMarkdown(text).toLowerCase();
   const noun = keyNoun(type);
-  const re = new RegExp(`\\b${noun.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(e?s)?\\b`, "i");
-  if (re.test(riddle)) return riddle;
-  const label = keepsake(type).label;
-  return `${riddle.replace(/\s+$/, "")} (Look for ${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}.)`;
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const forms = [noun, `${noun}s`, `${noun}es`, IRREGULAR[noun], noun.endsWith("f") ? `${noun.slice(0, -1)}ves` : null].filter(Boolean) as string[];
+  if (forms.some((f) => new RegExp(`\\b${esc(f)}\\b`).test(t))) return true;
+  const compact = keepsake(type).label.toLowerCase().replace(/[^a-z]/g, ""); // "seashell", "pinecone"
+  return compact.length > 4 && t.replace(/[^a-z]/g, "").includes(compact);
+}
+
+/** Plain template riddles that always name the keepsake. */
+export function templateRiddles(type: string): [string, string] {
+  const a = withArticle(keepsake(type).label);
+  return [
+    `Somewhere across the city lies ${a}. I dream of it most nights.`,
+    `Wander to a neighbourhood you rarely visit and look for ${a}.`,
+  ];
+}
+
+/**
+ * Guardrail for wish riddles (generation AND serving): the clearer riddle must
+ * name the wished keepsake. If it doesn't, the model drifted (e.g. book riddles
+ * for a palm frond), so both riddles are replaced by templates — appending a
+ * hint to an off-topic riddle would contradict itself.
+ */
+export function checkRiddles(r1: string, r2: string, type: string): [string, string] {
+  const a = stripMarkdown(r1), b = stripMarkdown(r2);
+  return namesKeepsake(b, type) ? [a, b] : templateRiddles(type);
 }
