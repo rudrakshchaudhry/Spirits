@@ -104,15 +104,47 @@ export function keyNoun(type: string): string {
 
 const IRREGULAR: Record<string, string> = { leaf: "leaves", tooth: "teeth", knife: "knives" };
 
-/** Does the text name this keepsake (key noun, its plurals, or the label written as one word)? */
+const words = (text: string) =>
+  stripMarkdown(text).toLowerCase().replace(/['’]/g, "").replace(/[^a-z\s-]/g, " ").split(/[\s-]+/).filter(Boolean);
+const labelWords = (type: string) => keepsake(type).label.toLowerCase().replace(/[^a-z\s-]/g, "").split(/[\s-]+/).filter(Boolean);
+const pluralForms = (noun: string) =>
+  [noun, `${noun}s`, `${noun}es`, IRREGULAR[noun], noun.endsWith("f") ? `${noun.slice(0, -1)}ves` : null].filter(Boolean) as string[];
+
+/** Whole-phrase match of a label ("cypress cone(s)") or its one-word form ("pinecone(s)"), never across words. */
+function hasLabelPhrase(ws: string[], type: string): boolean {
+  const lw = labelWords(type);
+  const last = pluralForms(lw[lw.length - 1]);
+  for (let i = 0; i + lw.length <= ws.length; i++) {
+    if (lw.slice(0, -1).every((w, j) => ws[i + j] === w) && last.includes(ws[i + lw.length - 1])) return true;
+  }
+  const compact = lw.join("");
+  return lw.length > 1 && ws.some((w) => w === compact || w === `${compact}s`);
+}
+
+/** Keepsakes whose label ends in the same noun (gum leaf / fig leaf / leaf …). */
+const siblingsOf = (type: string) => Object.keys(KEEPSAKES).filter((t) => t !== type && keyNoun(t) === keyNoun(type));
+
+/**
+ * Does the text name this keepsake? The key noun (with plurals) is enough when
+ * no other keepsake shares it; otherwise the full label is required, so a
+ * pine-cone riddle doesn't pass for a cypress cone.
+ */
 export function namesKeepsake(text: string, type: string): boolean {
-  const t = stripMarkdown(text).toLowerCase();
-  const noun = keyNoun(type);
-  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const forms = [noun, `${noun}s`, `${noun}es`, IRREGULAR[noun], noun.endsWith("f") ? `${noun.slice(0, -1)}ves` : null].filter(Boolean) as string[];
-  if (forms.some((f) => new RegExp(`\\b${esc(f)}\\b`).test(t))) return true;
-  const compact = keepsake(type).label.toLowerCase().replace(/[^a-z]/g, ""); // "seashell", "pinecone"
-  return compact.length > 4 && t.replace(/[^a-z]/g, "").includes(compact);
+  const ws = words(text);
+  if (hasLabelPhrase(ws, type)) return true;
+  if (siblingsOf(type).length) return false;
+  return pluralForms(keyNoun(type)).some((f) => ws.includes(f));
+}
+
+/** Does the text name a DIFFERENT, more specific keepsake (e.g. "gum leaf" when the wish is "leaf")? */
+export function namesOtherKeepsake(text: string, type: string): boolean {
+  const ws = words(text);
+  const mine = keepsake(type).label.toLowerCase();
+  return Object.keys(KEEPSAKES).some((t) => {
+    if (t === type || labelWords(t).length < 2) return false; // single generic words occur naturally
+    if (mine.includes(keepsake(t).label.toLowerCase())) return false;
+    return hasLabelPhrase(ws, t);
+  });
 }
 
 /** Plain template riddles that always name the keepsake. */
@@ -132,5 +164,6 @@ export function templateRiddles(type: string): [string, string] {
  */
 export function checkRiddles(r1: string, r2: string, type: string): [string, string] {
   const a = stripMarkdown(r1), b = stripMarkdown(r2);
-  return namesKeepsake(b, type) ? [a, b] : templateRiddles(type);
+  const drifted = !namesKeepsake(b, type) || namesOtherKeepsake(a, type) || namesOtherKeepsake(b, type);
+  return drifted ? templateRiddles(type) : [a, b];
 }

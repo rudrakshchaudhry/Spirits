@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { keepsake } from "@/lib/keepsakes/catalog";
+import { keepsake, withArticle } from "@/lib/keepsakes/catalog";
 import { verifyEncounter } from "@/lib/encounter/token";
 import { getCachedCard, secretChapter } from "@/lib/spirits/card";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
@@ -35,14 +35,14 @@ export async function POST(req: Request) {
     // atomic: row lock → still wished? → consume → clear + count (no double spend on double-click)
     const { data: result, error } = await sb.rpc("grant_bonus_wish", { p_player: player.id, p_spirit: claims.s, p_type: type });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (result === "missing") return NextResponse.json({ error: `you don't have a ${k.label}` }, { status: 400 });
+    if (result === "missing") return NextResponse.json({ error: `you don't have ${withArticle(k.label)}` }, { status: 400 });
     if (result !== "ok") return NextResponse.json({ error: "that wish was already granted" }, { status: 409 });
     return NextResponse.json({
       outcome: "bonus",
       trust: friend.trust,
       befriended: true,
       rare: friend.status === "rare",
-      line: `${card.name} lights up. "A ${k.label}! You remembered my new wish." ✦ A new star shines in your Atlas.`,
+      line: `${card.name} lights up. "${cap(withArticle(k.label))}! You remembered my new wish." ✦ A new star shines in your Atlas.`,
     });
   }
   // Once the first wish is granted, "close to the wish" means close to the open bonus wish (if any).
@@ -57,26 +57,16 @@ export async function POST(req: Request) {
     });
   }
 
-  const { data: consumed, error } = await sb.rpc("consume_keepsake", { p_player: player.id, p_type: type });
+  // atomic: row lock → still wished? → consume → update (no double spend, no lost update)
+  const { data: res, error } = await sb.rpc("apply_gift", {
+    p_player: player.id, p_spirit: claims.s, p_type: type, p_kind: wished ? "wish" : "theme", p_gain: wished ? 40 : 10,
+  });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!consumed) return NextResponse.json({ error: `you don't have a ${k.label}` }, { status: 400 });
-
-  const trust = Math.min(200, friend.trust + (wished ? 40 : 10));
-  const nowIso = new Date().toISOString();
-  const befriendedNow = friend.status === "met" && trust >= 100;
-  const status = wished ? "rare" : befriendedNow ? "befriended" : friend.status;
-  await sb
-    .from("friendships")
-    .update({
-      trust,
-      status,
-      befriended_at: friend.befriended_at ?? (status !== "met" ? nowIso : null),
-      lore_unlocked: status !== "met" ? Math.max(1, friend.lore_unlocked) : friend.lore_unlocked,
-      ...(wished ? { wish_fulfilled_at: nowIso } : {}),
-      last_visit_at: nowIso,
-    })
-    .eq("player_id", player.id)
-    .eq("spirit_id", claims.s);
+  const r = res as { result: string; trust?: number; status?: string };
+  if (r.result === "missing") return NextResponse.json({ error: `you don't have ${withArticle(k.label)}` }, { status: 400 });
+  if (r.result === "already") return NextResponse.json({ error: "that wish was already granted" }, { status: 409 });
+  if (r.result !== "ok") return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
+  const trust = r.trust!, status = r.status!;
   if (status !== "met") await sb.from("encounter_cooldowns").delete().eq("player_id", player.id).eq("spirit_id", claims.s);
 
   const secret = wished ? await secretChapter(card) : null;
@@ -87,7 +77,9 @@ export async function POST(req: Request) {
     rare: status === "rare",
     secret,
     line: wished
-      ? `${card.name} goes very still, then glows. "A ${k.label}… you found it. You actually found it."`
+      ? `${card.name} goes very still, then glows. "${cap(withArticle(k.label))}… you found it. You actually found it."`
       : `${card.name} turns the ${k.label} over and smiles. "Not quite what I dream of — but close, and kind."`,
   });
 }
+
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);

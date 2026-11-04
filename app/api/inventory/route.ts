@@ -7,7 +7,7 @@ import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 export async function GET(req: Request) {
   const player = await playerFrom(req);
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
-  const [items, { data: claims }] = await Promise.all([
+  const [items, { data: claims, error }] = await Promise.all([
     inventoryOf(player.id),
     supabaseAdmin()
       .from("pickups_claimed")
@@ -15,5 +15,6 @@ export async function GET(req: Request) {
       .eq("player_id", player.id)
       .gte("window_start", windowStart(windowIndex() - 1)),
   ]);
+  if (error) return NextResponse.json({ error: "couldn't open your pockets — try again" }, { status: 500 });
   return NextResponse.json({ items, claimed: (claims ?? []).map((c) => c.glint_id) });
 }

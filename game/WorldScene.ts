@@ -8,7 +8,6 @@ import type { SpiritSpawn } from "@/lib/spirits/spawn";
 import { EntityStore } from "@/lib/world/entityStore";
 import { api } from "@/lib/game/api";
 import { sfx } from "@/lib/game/sfx";
-import { keepsake } from "@/lib/keepsakes/catalog";
 import { type Glint, windowIndex } from "@/lib/keepsakes/glints";
 import type { InventoryResponse } from "@/lib/encounter/types";
 import { type Hood, hoodAt, taglineFor } from "@/lib/world/neighborhoods";
@@ -550,15 +549,12 @@ export class WorldScene extends Phaser.Scene {
       if (Math.hypot(gl.x - this.pos.x, gl.y - this.pos.y) > 0.85) continue;
       this.pickupPending.add(id);
       gl.img.setAlpha(0.4);
-      api<{ type: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", {
+      api<{ type: string; label: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", {
         method: "POST",
-        body: JSON.stringify({ glintId: id, ...(useGame.getState().forcedCond !== null ? { cond: useGame.getState().forcedCond } : {}) }),
+        body: JSON.stringify({ glintId: id }),
       })
         .then((r) => {
-          const label = keepsake(r.type).label;
-          const text = r.wishedBy.length
-            ? `Picked up a ${label}. ♪ ${r.wishedBy[0]} would love this…`
-            : `Picked up a ${label}${r.full ? " (your pocket for these is full)" : ""}.`;
+          const text = r.wishedBy.length ? `Picked up ${r.label}. ♪ ${r.wishedBy[0]} would love this…` : `Picked up ${r.label}.`;
           useGame.setState({ toast: { text, at: Date.now() } });
           sfx("pickup");
           this.claimed.add(id);
@@ -566,6 +562,7 @@ export class WorldScene extends Phaser.Scene {
           this.glints.delete(id);
         })
         .catch((e: Error) => {
+          if (/full/.test(e.message)) useGame.setState({ toast: { text: e.message, at: Date.now() } });
           if (/already|faded|nothing/.test(e.message)) {
             this.claimed.add(id);
             gl.img.destroy();
