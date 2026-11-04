@@ -1,0 +1,39 @@
+# Self-hosted SF Spirits. Elasticsearch, Supabase and Mistral are hosted services;
+# their keys come from .env.local (copy .env.example). See docs/DEPLOY.md.
+#
+#   npm run docker:up        # = docker compose --env-file .env.local up -d --build (app :3000 + cron)
+#   npm run docker:tools -- npm run es:setup             # one-time data setup (see docs)
+# --env-file .env.local is needed so the public Supabase build args below resolve.
+services:
+  app:
+    build:
+      context: .
+      target: runner
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?run with --env-file .env.local (or npm run docker:up)}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?run with --env-file .env.local (or npm run docker:up)}
+    image: sf-spirits:latest
+    env_file: .env.local
+    ports:
+      - "${PORT:-3000}:3000"
+    restart: unless-stopped
+
+  cron:
+    image: alpine:3.20
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file: .env.local # only CRON_SECRET is used
+    environment:
+      APP_URL: http://app:3000
+    volumes:
+      - ./docker/crontab.sh:/crontab.sh:ro
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache curl >/dev/null && /bin/sh /crontab.sh"]
+    restart: unless-stopped
+
+  tools:
+    build:
+      context: .
+      target: tools
+    env_file: .env.local
+    profiles: ["tools"]

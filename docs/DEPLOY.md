@@ -1,4 +1,9 @@
-# Deploying SF Spirits (Vercel)
+# Deploying SF Spirits
+
+Two options: **A. Vercel** (sections 1–6, recommended) or **B. Docker / self-hosting** (section 7). Both use the
+same hosted Elasticsearch, Supabase and Mistral, and the same environment variables.
+
+**Option A: Vercel**
 
 The repo is deploy-ready. These steps need your Vercel account, so they weren't run automatically.
 
@@ -29,6 +34,7 @@ The repo is deploy-ready. These steps need your Vercel account, so they weren't 
 The new-business cron runs up to ~20 s. Its `maxDuration` is 300, which needs Pro; on Hobby the limit is 60 s, which is still enough.
 
 ## 4. Supabase settings
+- **New Supabase project:** apply every file in `supabase/migrations/` in filename order, either in the SQL editor or with the Supabase CLI (`supabase link --project-ref <ref>` then `supabase db push`). The existing project `wyaubwtauvlvvsprkqbw` already has all of them, up to `20261104000011`.
 - Auth → Providers: keep **Email**. Guests are created server-side by `/api/guest`, so Anonymous sign-ins can stay off.
 - Auth → Settings: turn on **Leaked password protection** (the security advisor flags it).
 - Realtime is used for gathering lobbies (presence only, no tables). It's on by default.
@@ -48,3 +54,32 @@ The Elasticsearch inference endpoint `mistral-embed` (used by the Dev Tools hybr
 - Open `/`: you should get onboarding, then the world.
 - `curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/featured` should return the featured spirit.
 - Run `E2E_BASE=https://<app> npx tsx scripts/e2e-quest.ts <placeId>` against production (it creates a guest).
+
+## 7. Option B: Docker / self-hosting
+The `Dockerfile` builds a minimal Next.js standalone server (`runner` target) and a `tools` target with the full
+source for the data scripts. `docker-compose.yml` runs the app plus a small cron sidecar that calls the same cron
+routes on the same schedules as `vercel.json`.
+
+```bash
+cp .env.example .env.local          # fill in the keys
+npm run docker:up                   # docker compose --env-file .env.local up -d --build → http://localhost:3000
+PORT=8080 npm run docker:up         # another host port
+npm run docker:tools -- npm run es:setup     # data scripts run in the tools image
+npm run docker:tools -- npx tsx scripts/embed-places.ts
+npm run docker:down
+```
+Notes:
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` are baked into the browser bundle at **build** time
+  (they're public values). Rebuild the image after changing them. All other variables are read at runtime from
+  `.env.local`, and no secret is ever copied into the image (`.dockerignore` excludes `.env*`).
+- The container reports healthy once `/api/conditions` responds. The cron sidecar starts after that.
+- `next build` uses `output: "standalone"` only when `NEXT_OUTPUT=standalone` (the Dockerfile sets it), so Vercel and
+  `npm start` are unaffected.
+- Put a reverse proxy (TLS, request limits) in front for a public deployment. Rate limits key on `x-real-ip` /
+  `x-forwarded-for`, so the proxy must set those headers.
+- The `use cache` data cache lives in memory per container. For several replicas, see Next's self-hosting guide
+  (`node_modules/next/dist/docs/01-app/02-guides/self-hosting.md`).
+
+## CI
+`.github/workflows/ci.yml` runs on every PR and every push to `main`: lint, typecheck, unit tests, `next build`, then a
+Docker image build. None of these steps needs secrets.

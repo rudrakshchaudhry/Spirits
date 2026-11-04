@@ -2,6 +2,9 @@
   "name": "sf-spirits",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,10 +12,14 @@
     "lint": "eslint",
     "fetch:terrain": "tsx scripts/fetch-terrain-sources.ts",
     "bake": "tsx scripts/bake-tiles.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
+    "check": "eslint app components game lib scripts tests && npm run typecheck && vitest run",
     "es:setup": "tsx scripts/es-setup.ts",
     "ingest": "tsx scripts/ingest/all.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docker:up": "docker compose --env-file .env.local up -d --build",
+    "docker:down": "docker compose --env-file .env.local down",
+    "docker:tools": "docker compose --env-file .env.local run --rm tools"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.5.1",

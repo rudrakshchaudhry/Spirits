@@ -1,7 +1,25 @@
 # Long-term build: progress tracker
 
 Source of truth for what's left. Spec: `.plans/sf-spirits-spec.md` (§17 checkpoints, §20 roadmap).
-Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-d` → `checkpoint-e` …), each pushed with a PR into `main`. PRs are not merged without the user's OK.
+Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) → PR into `main` → high-effort review → fixes → merge. CI (`.github/workflows/ci.yml`) must pass. Merged branches are deleted.
+
+## Wrap-up status (2026-11-04)
+**State:** all spec checkpoints A–H are built, and every area has had a high-effort review with fixes merged (PRs #1–#17, plus this wrap-up PR). `main` is the only long-lived branch. The app builds and runs from a fresh clone (Node 22 or Docker); see README "Setting up on a new machine" and `docs/DEPLOY.md`.
+
+**Needs the user (not doable from here):**
+1. Rotate the Supabase secret key (it was pasted in chat), then update `.env.local` and the deploy env vars.
+2. Deploy: Vercel import + env vars (docs/DEPLOY.md §1–6), or Docker on a host (§7).
+3. Supabase Auth → turn on leaked-password protection.
+4. Product decision: should bonus (revisit) wishes count toward the weekly crew score? Today they don't (`crew_scores()` counts first wishes only).
+
+**Known limitations / ideas for later:**
+- The `use cache` data cache is per instance (fine on Vercel; for multi-replica self-hosting see Next's self-hosting guide).
+- Handle moderation (Mistral) sometimes rejects harmless random handles ("please pick a kinder name"). It fails open on API errors and closed on flags, by design.
+- The live greeting stream isn't moderated token by token (the prompt constrains it; cards and riddles are moderated).
+- `rate_hits` and `guest_signups` are pruned by the hourly cron. On Vercel Hobby (daily cron) they grow for up to a day, which is harmless.
+- Roadmap items out of scope: native app, push notifications, business partnerships (see below).
+
+**Infra facts:** Supabase project `wyaubwtauvlvvsprkqbw` (migrations up to `20261104000011` applied). Elastic indices `places`, `spirits`, `neighborhoods`, `events` (`npm run es:setup` is idempotent). Secrets live only in `.env.local` (git-ignored; git history scanned clean on 2026-11-04).
 
 ## Done
 - [x] A: walk the city (PR #1)
@@ -54,6 +72,7 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - [x] Sound pass (synth chimes for pickup / befriend / wish) + mute toggle
 - [x] Mobile pass (featured banner below the HUD on phones; panels fit 390 px)
 - [x] Deploy-ready: `docs/DEPLOY.md` (env vars, cron plan limits, Supabase settings, one-time data scripts)
+- [x] Docker image + compose (app + cron sidecar + tools), CI workflow, .nvmrc/engines (chore/wrap-up)
 - [ ] **Needs the user:** Vercel import + env vars (no Vercel CLI/login on this machine); rotate the Supabase secret key
 
 ## Roadmap items deliberately out of scope (need product/legal decisions)
