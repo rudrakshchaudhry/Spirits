@@ -170,3 +170,20 @@ describe("social rules", () => {
     expect(new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", hour12: false }).format(w)).toMatch(/Mon.*(00|24)/);
   });
 });
+
+describe("exploration anti-cheat", () => {
+  it("accepts only land chunks, caps per request and paces new chunks", async () => {
+    const { admitChunks, EXPLORE_LIMITS } = await import("@/lib/social/explore");
+    // 0_0 is open ocean → rejected; garbage rejected
+    const r1 = admitChunks(["32_32", "0_0", "../x", 5], new Set(), 0);
+    expect(r1.fresh).toEqual(["32_32"]);
+    // per-request cap
+    const many = Array.from({ length: 30 }, (_, i) => `${20 + (i % 10)}_${30 + Math.floor(i / 10)}`);
+    expect(admitChunks(many, new Set(), 0).fresh.length).toBeLessThanOrEqual(EXPLORE_LIMITS.perRequest);
+    // budget exhausted → new chunks deferred, revisits still fine
+    const r3 = admitChunks(["32_32", "32_33"], new Set(["32_32"]), EXPLORE_LIMITS.newPerWindow);
+    expect(r3.revisits).toEqual(["32_32"]);
+    expect(r3.fresh).toEqual([]);
+    expect(r3.deferred).toEqual(["32_33"]);
+  });
+});

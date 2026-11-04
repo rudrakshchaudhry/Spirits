@@ -683,7 +683,11 @@ export class WorldScene extends Phaser.Scene {
       const batch = [...this.exploreQueue];
       this.exploreQueue.clear();
       batch.forEach((k) => this.exploredSent.add(k));
-      api("/api/explore", { method: "POST", body: JSON.stringify({ chunks: batch }) }).catch(() => batch.forEach((k) => this.exploredSent.delete(k)));
+      api<{ deferred?: string[] }>("/api/explore", { method: "POST", body: JSON.stringify({ chunks: batch }) }).then(
+        // the server paces new chunks; re-queue whatever it deferred
+        (r) => (r.deferred ?? []).forEach((k) => { this.exploredSent.delete(k); this.exploreQueue.add(k); }),
+        () => batch.forEach((k) => this.exploredSent.delete(k)),
+      );
     }
   }
 

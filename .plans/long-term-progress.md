@@ -58,3 +58,6 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 
 ## Roadmap items deliberately out of scope (need product/legal decisions)
 - Native app (Capacitor), push notifications, business partnerships, real-world check-in bonuses at shops
+
+## Self-improvement log
+- improve/explore-cap: /api/explore accepted 50 arbitrary chunk keys per call (incl. ocean), so one request could unlock the crew board, evolve the companion and farm crew scores. Now land-only, 10/request, 40 new chunks per 5 min; client re-queues deferred keys. +1 test.
