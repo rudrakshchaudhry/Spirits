@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import type { HazeEntry } from "@/lib/conditions/rules";
 import { type Hood, loadNeighborhoods } from "@/lib/world/neighborhoods";
 
 const MAP_W = 3520, MAP_H = 3529; // world tiles (matches public/minimap.png extent)
@@ -10,7 +11,7 @@ const MAP_W = 3520, MAP_H = 3529; // world tiles (matches public/minimap.png ext
  * exact position of anything undiscovered.
  */
 export default function AtlasMap({ explored, glow, featured, haze }: {
-  explored: Record<string, number>; glow: string[]; featured?: string | null; haze?: Record<string, { score: number; prev: number | null; lifting?: boolean }>;
+  explored: Record<string, number>; glow: string[]; featured?: string | null; haze?: Record<string, HazeEntry>;
 }) {
   const [hoods, setHoods] = useState<Hood[] | null>(null);
   const [hover, setHover] = useState<string | null>(null);

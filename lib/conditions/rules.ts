@@ -58,11 +58,14 @@ export const CONDITION_LABEL: Record<ConditionTag, string> = {
   blossom: "blossom",
 };
 
+/** Per-neighbourhood 311 haze: 0..1 score, and whether it's lifting vs a day ago. */
+export type HazeEntry = { score: number; lifting: boolean };
+
 /** What /api/conditions returns (client view). */
 export type ConditionsView = Conditions & {
   tags: ConditionTag[];
   key: string;
   devAllowed: boolean;
-  haze: Record<string, { score: number; prev: number | null; lifting: boolean }>;
+  haze: Record<string, HazeEntry>;
   featured: { family: string; rarity: string; neighborhood: string; date: string } | null;
 };

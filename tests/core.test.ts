@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { activeTags, condKey, conditionKeepsakes, parseCondKey } from "@/lib/conditions/rules";
 import { minDurationMs, mosaicFor, rhythmFor, rushFor } from "@/lib/encounter/games";
 import { signEncounter, verifyEncounter } from "@/lib/encounter/token";
@@ -293,8 +293,8 @@ describe("checkpoint G review fixes", () => {
 });
 
 describe("live weather parsing (Open-Meteo)", () => {
+  afterEach(() => vi.unstubAllGlobals());
   const stub = async (status: number, body: unknown) => {
-    const { vi } = await import("vitest");
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status })));
     const { computeConditions } = await import("@/lib/conditions/server");
     return computeConditions(new Date("2026-11-04T20:00:00Z"));

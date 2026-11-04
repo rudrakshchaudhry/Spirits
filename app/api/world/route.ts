@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: `pass 1–${MAX_CHUNKS} chunk keys as ?chunks=cx_cy,…` }, { status: 400 });
   }
   const dateParam = sp.get("date");
-  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : sfDate();
+  const dateOk = !!dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam);
+  const date = dateOk ? dateParam : sfDate();
   try {
     // Glints change every 2-hour window: the client puts `w` in the URL so caches key on it.
     // integer windows only, and only ones /api/pickup accepts (now, or the grace window now-1)
@@ -39,10 +40,10 @@ export async function GET(req: NextRequest) {
       }),
     );
     const body: WorldResponse = { date, window: win, cond: ck, chunks };
-    // Only cache publicly when the URL's condition key matches what we actually served;
-    // otherwise a CDN would store a night/fog world under a clear-weather URL.
+    // Only cache publicly when the URL names exactly what we served (condition key, window and
+    // date); otherwise a CDN would store e.g. a night/fog world or an old window under another URL.
     const urlKey = sp.get("cond") ?? sp.get("ck");
-    const cacheable = urlKey !== null && urlKey === ck && sp.get("w") !== null;
+    const cacheable = urlKey !== null && urlKey === ck && sp.get("w") === String(win) && dateOk;
     return NextResponse.json(body, {
       headers: { "Cache-Control": cacheable ? "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" : "no-store" },
     });

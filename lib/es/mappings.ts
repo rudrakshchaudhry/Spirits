@@ -85,6 +85,7 @@ export const MAPPINGS: Record<string, estypes.MappingTypeMapping> = {
       haze_prev: { type: "float" },
       haze_density: { type: "float" },
       haze_density_prev: { type: "float" },
+      haze_density_snap: { type: "float" },
       haze_prev_at: { type: "date" },
       haze_updated_at: { type: "date" },
       open_311_count: { type: "integer" },
