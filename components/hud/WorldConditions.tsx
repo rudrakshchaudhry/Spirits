@@ -51,7 +51,7 @@ export default function WorldConditions() {
         {c.source === "forced" && <span className="ml-1 text-amber-300">(dev)</span>}
       </div>
       {c.featured && !bannerHidden && (
-        <div className="absolute inset-x-0 top-3 flex justify-center px-16">
+        <div className="absolute inset-x-0 top-36 flex justify-center px-4 sm:top-3 sm:px-48">
           <button
             type="button"
             onClick={() => {

@@ -7,6 +7,7 @@ import type { Entity } from "@/lib/world/entities";
 import type { SpiritSpawn } from "@/lib/spirits/spawn";
 import { EntityStore } from "@/lib/world/entityStore";
 import { api } from "@/lib/game/api";
+import { sfx } from "@/lib/game/sfx";
 import { keepsake } from "@/lib/keepsakes/catalog";
 import { type Glint, windowIndex } from "@/lib/keepsakes/glints";
 import type { InventoryResponse } from "@/lib/encounter/types";
@@ -558,6 +559,7 @@ export class WorldScene extends Phaser.Scene {
             ? `Picked up a ${label}. ♪ ${r.wishedBy[0]} would love this…`
             : `Picked up a ${label}${r.full ? " (your pocket for these is full)" : ""}.`;
           useGame.setState({ toast: { text, at: Date.now() } });
+          sfx("pickup");
           this.claimed.add(id);
           gl.img.destroy();
           this.glints.delete(id);

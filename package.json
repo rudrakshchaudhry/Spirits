@@ -11,7 +11,8 @@
     "bake": "tsx scripts/bake-tiles.ts",
     "typecheck": "tsc --noEmit",
     "es:setup": "tsx scripts/es-setup.ts",
-    "ingest": "tsx scripts/ingest/all.ts"
+    "ingest": "tsx scripts/ingest/all.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.5.1",
@@ -38,6 +39,7 @@
     "pngjs": "^7.0.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

@@ -1,5 +1,25 @@
 "use client";
+import { useEffect, useState } from "react";
+import { isMuted, setMuted } from "@/lib/game/sfx";
 import { useGame } from "@/lib/game/store";
+
+function MuteButton() {
+  const [m, setM] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setM(isMuted()), 0);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <button
+      type="button"
+      aria-label={m ? "Unmute sounds" : "Mute sounds"}
+      onClick={() => { setMuted(!m); setM(!m); }}
+      className="pointer-events-auto absolute right-3 top-[7.75rem] rounded-md bg-slate-950/60 px-2 py-1 text-xs text-slate-200 sm:top-[11.5rem]"
+    >
+      {m ? "♪ off" : "♪ on"}
+    </button>
+  );
+}
 
 /** Loading state + (dev) coordinates readout. */
 export default function StatusBar() {
@@ -16,6 +36,8 @@ export default function StatusBar() {
     );
 
   return (
+    <>
+    <MuteButton />
     <div className={`pointer-events-none absolute bottom-3 right-3 ${dev ? "" : "hidden sm:block"} rounded bg-slate-950/55 px-2 py-1 text-right font-mono text-[11px] leading-tight text-slate-200`}>
       {dev && (
         <div>
@@ -24,5 +46,6 @@ export default function StatusBar() {
       )}
       <div className="hidden sm:block">WASD / arrows · E meet · B atlas · T town · M map</div>
     </div>
+    </>
   );
 }

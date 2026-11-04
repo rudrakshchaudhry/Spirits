@@ -50,9 +50,11 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - Deferred: "new wish on revisit (30%)" bonus
 
 ## H: Polish and deploy (branch `checkpoint-h`)
-- [ ] Loading states, sound pass, mobile pass, accessibility pass
-- [ ] Vercel deploy (env vars, cron)
-- [ ] Tests for core server logic
+- [x] Unit tests (vitest, 21): projection, spawning, glints, conditions, tokens, games, catalog, social rules, trades, check-in distance
+- [x] Sound pass (synth chimes for pickup / befriend / wish) + mute toggle
+- [x] Mobile pass (featured banner below the HUD on phones; panels fit 390 px)
+- [x] Deploy-ready: `docs/DEPLOY.md` (env vars, cron plan limits, Supabase settings, one-time data scripts)
+- [ ] **Needs the user:** Vercel import + env vars (no Vercel CLI/login on this machine); rotate the Supabase secret key
 
 ## Roadmap items deliberately out of scope (need product/legal decisions)
 - Native app (Capacitor), push notifications, business partnerships, real-world check-in bonuses at shops

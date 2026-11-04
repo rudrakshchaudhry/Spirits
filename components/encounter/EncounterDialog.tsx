@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bus } from "@/lib/game/bus";
 import { accessToken, api } from "@/lib/game/api";
+import { sfx } from "@/lib/game/sfx";
 import { useGame } from "@/lib/game/store";
 import type { GiftResponse, PlayResponse, StartResponse } from "@/lib/encounter/types";
 import { FAMILY_LABEL, RARITY_STYLE } from "@/lib/spirits/labels";
@@ -127,6 +128,7 @@ export default function EncounterDialog() {
         setPhase("result");
         requestAnimationFrame(() => setShownTrust(r.trust));
         if (r.befriended) {
+          sfx("befriend");
           useGame.setState((s) => ({ friends: { ...s.friends, [data.spirit.id]: true } }));
           bus.emit("spirit:befriended", { spiritId: data.spirit.id });
         }
@@ -143,6 +145,7 @@ export default function EncounterDialog() {
       setGift(g);
       setGiftOpen(false);
       if (g.outcome === "declined" || !data) return;
+      sfx(g.outcome === "wish" ? "wish" : "befriend");
       setShownTrust(g.trust);
       if (g.befriended) {
         useGame.setState((s) => ({ friends: { ...s.friends, [data.spirit.id]: true } }));
