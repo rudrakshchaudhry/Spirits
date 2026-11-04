@@ -1,6 +1,7 @@
 import { INDEX, es } from "@/lib/es/client";
 import { CHUNK_TILES, chunkBBox, latLonToTile } from "@/lib/geo/projection";
-import { type PlaceKind, spawnFor } from "@/lib/spirits/spawn";
+import type { ConditionTag } from "@/lib/conditions/rules";
+import { type PlaceKind, conditionSpawn, spawnFor } from "@/lib/spirits/spawn";
 import type { ChunkEntities, Entity } from "./entities";
 
 type Src = {
@@ -18,7 +19,7 @@ type Src = {
 const MAX_PER_CHUNK = 1500;
 
 /** Uncached chunk query (no next/* imports, so scripts can use it). */
-export async function queryChunk(key: string, date: string): Promise<ChunkEntities> {
+export async function queryChunk(key: string, date: string, condTags: ConditionTag[] = []): Promise<ChunkEntities> {
   const [cx, cy] = key.split("_").map(Number);
   const bb = chunkBBox(cx, cy);
   const res = await es().search<Src>({
@@ -48,7 +49,12 @@ export async function queryChunk(key: string, date: string): Promise<ChunkEntiti
     // bbox is inclusive on edges; keep only points that belong to this chunk
     if (Math.floor(t.x / CHUNK_TILES) !== cx || Math.floor(t.y / CHUNK_TILES) !== cy) continue;
     const tags = s.tags ?? [];
-    const spirit = spawnFor({ id: s.id, kind: s.kind, rank: s.rank ?? 0, tags, openedAt: s.attrs?.opened_at }, date) ?? undefined;
+    const input = {
+      id: s.id, kind: s.kind, rank: s.rank ?? 0, tags, openedAt: s.attrs?.opened_at,
+      foggy: tags.includes("coastal") || s.location.lon < -122.465,
+    };
+    const spirit = spawnFor(input, date) ?? undefined;
+    const cspirit = condTags.length ? conditionSpawn(input, date, condTags) ?? undefined : undefined;
     entities.push({
       id: s.id,
       kind: s.kind,
@@ -59,6 +65,8 @@ export async function queryChunk(key: string, date: string): Promise<ChunkEntiti
       rank: s.rank ?? 0,
       ...(s.keepsake_types?.length ? { ks: s.keepsake_types } : {}),
       ...(spirit ? { spirit } : {}),
+      ...(cspirit ? { cspirit } : {}),
+      ...(spirit?.rarity === "rare" && s.kind === "business" ? { fresh: 1 as const } : {}),
     });
   }
   return { key, date, entities };

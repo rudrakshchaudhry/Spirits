@@ -10,6 +10,8 @@ export type EncounterSpirit = {
   look: string | null;
   seed: number;
   model: string;
+  variant?: "night" | "fog" | "rain" | "blossom" | null;
+  featured?: boolean;
 };
 export type EncounterPlace = { id: string; name: string; kind: string; neighborhood: string | null };
 

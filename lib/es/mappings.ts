@@ -82,6 +82,8 @@ export const MAPPINGS: Record<string, estypes.MappingTypeMapping> = {
       name: { type: "keyword" },
       shape: { type: "geo_shape", ignore_malformed: true },
       haze_score: { type: "float" },
+      haze_prev: { type: "float" },
+      haze_updated_at: { type: "date" },
       open_311_count: { type: "integer" },
       area_km2: { type: "float" },
       exclusive_keepsakes: { type: "keyword" },

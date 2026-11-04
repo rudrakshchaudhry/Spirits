@@ -4,6 +4,7 @@ import { type SpiritRef, useGame } from "@/lib/game/store";
 import { CHUNK_TILES, TILE_PX, chunkKey, latLonToTile, tileToLatLon } from "@/lib/geo/projection";
 import type { ChunkStore } from "@/lib/world/chunks";
 import type { Entity } from "@/lib/world/entities";
+import type { SpiritSpawn } from "@/lib/spirits/spawn";
 import { EntityStore } from "@/lib/world/entityStore";
 import { api } from "@/lib/game/api";
 import { keepsake } from "@/lib/keepsakes/catalog";
@@ -12,6 +13,7 @@ import type { InventoryResponse } from "@/lib/encounter/types";
 import { type Hood, hoodAt, taglineFor } from "@/lib/world/neighborhoods";
 import { TERRAIN_COLORS, TERRAIN_COUNT, T, terrainOf } from "@/lib/world/terrain";
 import { WANDERER_FRAME, drawTileset, drawWanderer } from "./art";
+import { Atmosphere } from "./atmosphere";
 import { markerTexture, treeSizeFor, treeTexture } from "./entityArt";
 import { spiritTexture } from "./spiritArt";
 
@@ -39,7 +41,7 @@ type ChunkLayer = {
   objects: Phaser.GameObjects.GameObject[];
 };
 
-export type LiveSpirit = { entity: Entity; sprite: Phaser.GameObjects.Sprite; x: number; y: number };
+export type LiveSpirit = { entity: Entity; spawn: SpiritSpawn; sprite: Phaser.GameObjects.Sprite; x: number; y: number };
 
 /** 8 neighbour offsets; a spirit picks one (by seed) to stand beside its anchor. */
 const AROUND: [number, number][] = [[1, 0], [-1, 0], [0, 1], [1, 1], [-1, 1], [0, -1], [1, -1], [-1, -1]];
@@ -75,6 +77,8 @@ export class WorldScene extends Phaser.Scene {
   private exploredSent = new Set<string>();
   private lastChunkKey = "";
   private lastExploreFlush = 0;
+  private atmosphere!: Atmosphere;
+  private condSig = "";
 
   constructor() {
     super("world");
@@ -118,6 +122,23 @@ export class WorldScene extends Phaser.Scene {
     });
     this.makeHeart();
     this.makeGlint();
+    this.atmosphere = new Atmosphere(this, this.hoods);
+    // Conditions drive visuals and which spirits exist (condition spirits, keepsakes).
+    const onCond = () => {
+      const st = useGame.getState();
+      if (!st.conditions) return;
+      this.atmosphere.setConditions(st.conditions);
+      const sig = `${st.conditions.key}|${st.forcedCond ?? ""}|${st.conditions.phase}`;
+      if (sig === this.condSig) return;
+      const first = this.condSig === "";
+      this.condSig = sig;
+      this.entities.setConditions(st.forcedCond, st.conditions.key);
+      if (!first) this.repopulate();
+    };
+    this.unsub.push(useGame.subscribe((st, prev) => {
+      if (st.conditions !== prev.conditions || st.forcedCond !== prev.forcedCond) onCond();
+    }));
+    onCond();
     // glints this player already picked up this window
     api<InventoryResponse>("/api/inventory").then(
       (r) => {
@@ -205,8 +226,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private refOf(live: LiveSpirit): SpiritRef {
-    const e = live.entity, sp = e.spirit!;
-    return { spiritId: sp.id, placeId: e.id, kind: e.kind, family: sp.family, rarity: sp.rarity, look: e.look, seed: sp.seed };
+    const e = live.entity, sp = live.spawn;
+    return { spiritId: sp.id, placeId: e.id, kind: e.kind, family: sp.family, rarity: sp.rarity, look: e.look, seed: sp.seed, variant: sp.variant };
   }
 
   /** Nearest spirit within REACH → store (prompt) + gentle highlight. */
@@ -319,6 +340,7 @@ export class WorldScene extends Phaser.Scene {
       this.trackExploration(time);
       if (windowIndex() !== this.glintWindow) this.refreshGlints();
     }
+    this.atmosphere.update(this.pos, dt);
     if (time - this.lastHoodCheck > 250) {
       this.lastHoodCheck = time;
       this.checkNeighborhood();
@@ -508,7 +530,10 @@ export class WorldScene extends Phaser.Scene {
       if (Math.hypot(gl.x - this.pos.x, gl.y - this.pos.y) > 0.85) continue;
       this.pickupPending.add(id);
       gl.img.setAlpha(0.4);
-      api<{ type: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", { method: "POST", body: JSON.stringify({ glintId: id }) })
+      api<{ type: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", {
+        method: "POST",
+        body: JSON.stringify({ glintId: id, ...(useGame.getState().forcedCond !== null ? { cond: useGame.getState().forcedCond } : {}) }),
+      })
         .then((r) => {
           const label = keepsake(r.type).label;
           const text = r.wishedBy.length
@@ -527,6 +552,24 @@ export class WorldScene extends Phaser.Scene {
           } else gl.img.setAlpha(1);
         })
         .finally(() => this.pickupPending.delete(id));
+    }
+  }
+
+  /** Conditions changed: rebuild every loaded chunk's entities, spirits and glints. */
+  private repopulate() {
+    for (const [, gl] of this.glints) gl.img.destroy();
+    this.glints.clear();
+    for (const [key, l] of this.layers) {
+      this.clearObjects(l);
+      if (!this.chunks.manifest.chunks.includes(key)) continue;
+      this.entities.load(key).then(
+        (c) => {
+          if (this.layers.get(key) !== l || l.objects.length) return;
+          this.populate(l, c.entities);
+          this.addGlints(l, c.glints);
+        },
+        (e) => console.warn("repopulate", key, e),
+      );
     }
   }
 
@@ -557,6 +600,42 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** Stand a spirit beside its anchor on an open, preferably non-road tile (chosen by seed). */
+  private placeSpirit(
+    l: ChunkLayer, e: Entity, sp: SpiritSpawn, anchor: { x: number; y: number },
+    used: Set<number>, mark: (x: number, y: number) => void,
+  ) {
+    let px = anchor.x, py = anchor.y;
+    outer: for (const avoidRoad of [true, false]) {
+      for (let i = 0; i < AROUND.length; i++) {
+        const [dx, dy] = AROUND[(sp.seed + i) % AROUND.length];
+        const tx = anchor.x + dx * 1.2, ty = anchor.y + dy * 1.2;
+        const tile = this.chunks.tileAt(Math.floor(tx), Math.floor(ty));
+        if (tile === undefined || this.chunks.isSolid(Math.floor(tx), Math.floor(ty))) continue;
+        if (avoidRoad && terrainOf(tile) === T.ROAD) continue;
+        if (used.has(Math.floor(ty) * 100_000 + Math.floor(tx))) continue;
+        px = tx; py = ty;
+        break outer;
+      }
+    }
+    mark(px, py);
+    const key = spiritTexture(this, { family: sp.family, rarity: sp.rarity, seed: sp.seed, look: e.look, variant: sp.variant });
+    const sprite = this.add.sprite(px * TILE_PX, py * TILE_PX, key, 0).setOrigin(0.5, 1).setDepth(py * TILE_PX + 0.25);
+    sprite.play({ key: `${key}:idle`, startFrame: sp.seed % 4 });
+    sprite.setData("spiritId", sp.id);
+    l.objects.push(sprite);
+    const live: LiveSpirit = { entity: e, spawn: sp, sprite, x: px, y: py };
+    this.spirits.set(sp.id, live);
+    if (useGame.getState().friends[sp.id]) this.addHeart(sprite);
+    sprite.setInteractive({ useHandCursor: true });
+    sprite.on("pointerdown", () => {
+      const st = useGame.getState();
+      if (st.encounter || st.atlasOpen) return;
+      if (Math.hypot(live.x - this.pos.x, live.y - this.pos.y) <= CLICK_REACH) useGame.setState({ encounter: this.refOf(live) });
+      else useGame.setState({ toast: { text: "Walk a little closer to say hello.", at: Date.now() } });
+    });
+  }
+
   private populate(l: ChunkLayer, list: Entity[]) {
     // Many records share a point (films at City Hall, shops in one building): spread them out.
     const used = new Set<number>();
@@ -576,46 +655,26 @@ export class WorldScene extends Phaser.Scene {
       const ax = anchor.x * TILE_PX, ay = anchor.y * TILE_PX;
 
       // Anchor sprite: a tree, or a small marker for everything else.
+      const spawns = [e.spirit, e.cspirit].filter((x): x is SpiritSpawn => !!x);
       let tex: string;
       if (e.kind === "tree") tex = treeTexture(this, e.look, treeSizeFor(e.rank));
-      else if (e.kind === "park" && !e.spirit) continue;
+      else if (e.kind === "park" && !spawns.length) continue;
       else tex = markerTexture(this, e.kind, e.look);
       const img = this.add.image(ax, ay, tex).setOrigin(0.5, 1).setDepth(ay);
       l.objects.push(img);
-
-      if (!e.spirit) continue;
-      const sp = e.spirit;
-      // Stand beside the anchor on an open tile, chosen by seed.
-      // Prefer an open tile that isn't roadway; fall back to any open tile.
-      let px = anchor.x, py = anchor.y;
-      outer: for (const avoidRoad of [true, false]) {
-        for (let i = 0; i < AROUND.length; i++) {
-          const [dx, dy] = AROUND[(sp.seed + i) % AROUND.length];
-          const tx = anchor.x + dx * 1.2, ty = anchor.y + dy * 1.2;
-          const tile = this.chunks.tileAt(Math.floor(tx), Math.floor(ty));
-          if (tile === undefined || this.chunks.isSolid(Math.floor(tx), Math.floor(ty))) continue;
-          if (avoidRoad && terrainOf(tile) === T.ROAD) continue;
-          if (used.has(Math.floor(ty) * 100_000 + Math.floor(tx))) continue;
-          px = tx; py = ty;
-          break outer;
-        }
+      const cond = useGame.getState().conditions;
+      if (e.kind === "business" && cond && (cond.phase === "night" || cond.phase === "dusk")) {
+        // warm shop-window light after dark (spec §4.4 lamp glow)
+        l.objects.push(this.add.image(ax, ay - 6, "glow").setScale(0.35).setBlendMode(Phaser.BlendModes.ADD).setDepth(ay - 0.5));
       }
-      mark(px, py);
-      const key = spiritTexture(this, { family: sp.family, rarity: sp.rarity, seed: sp.seed, look: e.look });
-      const sprite = this.add.sprite(px * TILE_PX, py * TILE_PX, key, 0).setOrigin(0.5, 1).setDepth(py * TILE_PX + 0.25);
-      sprite.play({ key: `${key}:idle`, startFrame: sp.seed % 4 });
-      sprite.setData("spiritId", sp.id);
-      l.objects.push(sprite);
-      const live: LiveSpirit = { entity: e, sprite, x: px, y: py };
-      this.spirits.set(sp.id, live);
-      if (useGame.getState().friends[sp.id]) this.addHeart(sprite);
-      sprite.setInteractive({ useHandCursor: true });
-      sprite.on("pointerdown", () => {
-        const st = useGame.getState();
-        if (st.encounter || st.atlasOpen) return;
-        if (Math.hypot(live.x - this.pos.x, live.y - this.pos.y) <= CLICK_REACH) useGame.setState({ encounter: this.refOf(live) });
-        else useGame.setState({ toast: { text: "Walk a little closer to say hello.", at: Date.now() } });
-      });
+      if (e.fresh) {
+        // "grand opening" sparkle for shops that opened in the last 14 days (spec §12)
+        const sp = this.add.sprite(ax + 6, ay - 16, "glint", 0).setTint(0xffd36e).setDepth(ay + 1);
+        sp.play({ key: "glint:twinkle" });
+        l.objects.push(sp);
+      }
+
+      for (const sp of spawns) this.placeSpirit(l, e, sp, anchor, used, mark);
     }
     useGame.setState({ spiritsNearby: this.spirits.size });
   }

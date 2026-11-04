@@ -69,7 +69,12 @@ export default function EncounterDialog() {
       setGiftOpen(false);
       setGift(null);
       try {
-        const res = await api<StartResponse>("/api/encounter/start", { method: "POST", body: JSON.stringify({ placeId: ref.placeId }), signal: ac.signal });
+        const forced = useGame.getState().forcedCond;
+        const res = await api<StartResponse>("/api/encounter/start", {
+          method: "POST",
+          body: JSON.stringify({ placeId: ref.placeId, ...(ref.variant ? { variant: ref.variant } : {}), ...(forced !== null ? { cond: forced } : {}) }),
+          signal: ac.signal,
+        });
         if (cancelled) return;
         setData(res);
         setShownTrust(res.trust);
@@ -177,12 +182,14 @@ export default function EncounterDialog() {
         {/* header */}
         <div className="flex items-start gap-3">
           <div className="shrink-0 rounded-lg bg-white/5 p-1">
-            <SpiritPortrait family={family} rarity={rarity} seed={sp?.seed ?? ref.seed} look={sp?.look ?? ref.look} size={84} />
+            <SpiritPortrait family={family} rarity={rarity} seed={sp?.seed ?? ref.seed} look={sp?.look ?? ref.look} variant={sp?.variant ?? ref.variant} size={84} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-pixel text-2xl leading-none">{sp?.name ?? "…"}</h2>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${RARITY_STYLE[rarity]}`}>{rarity}</span>
+              {sp?.variant && <span className="rounded bg-sky-200/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-sky-100">{sp.variant} spirit</span>}
+              {sp?.featured && <span className="rounded bg-fuchsia-300/25 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fuchsia-100">★ featured today</span>}
             </div>
             <p className="mt-1 text-xs text-slate-400">
               {FAMILY_LABEL[family] ?? family}

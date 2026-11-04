@@ -22,6 +22,7 @@
     "phaser": "^3.90.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "suncalc": "^1.9.0",
     "zod": "^4.6.7",
     "zustand": "^5.0.16"
   },
@@ -31,6 +32,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/suncalc": "^1.9.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.5",
     "pngjs": "^7.0.0",

@@ -5,8 +5,8 @@ import type { Family, Rarity } from "@/lib/spirits/spawn";
 
 /** Pixel portrait of a spirit, drawn with the same procedural art as the world. */
 export default function SpiritPortrait({
-  family, rarity, seed, look, size = 96, animate = true,
-}: { family: string; rarity: string; seed: number; look?: string | null; size?: number; animate?: boolean }) {
+  family, rarity, seed, look, variant, size = 96, animate = true,
+}: { family: string; rarity: string; seed: number; look?: string | null; variant?: "night" | "fog" | "rain" | "blossom" | null; size?: number; animate?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const c = ref.current;
@@ -15,7 +15,7 @@ export default function SpiritPortrait({
     let frame = 0;
     const draw = () => {
       ctx.clearRect(0, 0, SPIRIT_PX, SPIRIT_PX);
-      drawSpiritPortrait(ctx, { family: family as Family, rarity: rarity as Rarity, seed, look: look ?? undefined }, frame);
+      drawSpiritPortrait(ctx, { family: family as Family, rarity: rarity as Rarity, seed, look: look ?? undefined, variant }, frame);
     };
     draw();
     if (!animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -27,7 +27,7 @@ export default function SpiritPortrait({
       draw();
     }, 250);
     return () => clearInterval(t);
-  }, [family, rarity, seed, look, animate]);
+  }, [family, rarity, seed, look, variant, animate]);
   return (
     <canvas
       ref={ref}

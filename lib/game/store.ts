@@ -1,5 +1,6 @@
 "use client";
 import { create } from "zustand";
+import type { ConditionsView } from "@/lib/conditions/rules";
 
 /** A spirit the player can interact with (from the world layer). */
 export type SpiritRef = {
@@ -10,6 +11,8 @@ export type SpiritRef = {
   rarity: "common" | "uncommon" | "rare" | "legendary";
   look?: string;
   seed: number;
+  /** condition spirit variant */
+  variant?: "night" | "fog" | "rain" | "blossom";
 };
 
 /** Shared Phaser ↔ React state (spec §3: event bus + Zustand store). */
@@ -33,6 +36,10 @@ export type GameState = {
   /** spirit ids befriended this session (world shows a heart) */
   friends: Record<string, true>;
   toast: { text: string; at: number } | null;
+  /** live world conditions (spec §12) */
+  conditions: ConditionsView | null;
+  /** dev panel override, e.g. "fog.night" ("" = force clear); null = live */
+  forcedCond: string | null;
   setJoystick: (x: number, y: number) => void;
 };
 
@@ -49,5 +56,7 @@ export const useGame = create<GameState>((set) => ({
   atlasOpen: false,
   friends: {},
   toast: null,
+  conditions: null,
+  forcedCond: null,
   setJoystick: (x, y) => set({ joystick: { x, y } }),
 }));

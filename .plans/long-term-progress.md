@@ -28,15 +28,15 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - [x] Reduced motion (rhythm ring mode), colour-blind safe (✓/✗ + text feedback, shape-based mosaic)
 - [x] Dev test hook `window.__game` (only with ?dev=1)
 
-## F: Living world (branch `checkpoint-f`)
-- [ ] /api/conditions: Open-Meteo (fog/rain) + suncalc (night) + blossom season, cached 15 min
-- [ ] Day/night tint + lamp glow, fog overlay, rain particles
-- [ ] Condition spirits (night/fog/rain/blossom variants, +1 rarity)
-- [ ] Condition-gated keepsakes (fog scrap, rain drop, moon dust, petal)
-- [ ] 311 haze: ingest-311 aggregation → neighborhoods.haze_score; haze overlay
-- [ ] New-business sparkle marker; daily featured rare (+ banner + Atlas hint)
-- [ ] Dev conditions panel (?dev=1)
-- [ ] Cron routes (vercel.json)
+## F: Living world (branch `checkpoint-f`) ✅
+- [x] /api/conditions: Open-Meteo fog/rain + suncalc phase + blossom season, cached 15 min; haze map; featured hint
+- [x] Atmosphere: day/night tint, lantern + shop-window glow, drifting fog (thicker west), rain particles, haze veil per neighbourhood
+- [x] Condition spirits (night/fog/rain/blossom, +1 rarity, own Mistral cards, variant auras)
+- [x] Condition keepsakes (scrap of fog, rain drop, moon dust, petal)
+- [x] 311 haze: `npm run ingest -- haze` (aggregates only) → neighborhoods.haze_score/prev; Atlas "haze is lifting"
+- [x] New-business sparkle; daily featured rare (06:00 PT) with banner, encounter chip, Atlas compass hint
+- [x] Dev panel (?dev=1, server needs ALLOW_DEV_CONDITIONS=1): force conditions, teleport, ★ featured, grant keepsakes
+- [x] Cron routes + vercel.json (CRON_SECRET): refresh-311 hourly (needs Vercel Pro; hobby = daily), new-business daily, featured daily
 
 ## G: Together (branch `checkpoint-g`)
 - [ ] Onboarding: handle, home neighborhood (crew), companion pick (Mote/Sprig/Tidepip)
