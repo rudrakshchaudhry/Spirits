@@ -8,22 +8,21 @@
 import { z } from "zod";
 import { INDEX, es } from "@/lib/es/client";
 import { MODELS, flagged, mistral } from "@/lib/mistral/client";
-import { BUSINESS_CATEGORIES, KIND_KEEPSAKES, SPECIES_GROUPS, EXCLUSIVE_KEEPSAKES } from "@/lib/places/catalog";
+import { WISHABLE } from "@/lib/keepsakes/catalog";
+import { BUSINESS_CATEGORIES, EXCLUSIVE_KEEPSAKES, SPECIES_GROUPS } from "@/lib/places/catalog";
+
+/** Neighbourhoods where an exclusive keepsake (sea shell, paper lantern…) can be found. */
+export function exclusiveHoods(type: string): string[] {
+  return Object.entries(EXCLUSIVE_KEEPSAKES).filter(([, ks]) => ks.includes(type)).map(([h]) => h);
+}
 import { FAMILY_OF, type PlaceKind, type Rarity, hash32, spawnFor, sfDate } from "./spawn";
 
 export const TEMPERAMENTS = ["shy", "wary", "calm", "curious", "bold"] as const;
 export type Temperament = (typeof TEMPERAMENTS)[number];
 export const START_TRUST: Record<Temperament, number> = { shy: 10, wary: 20, calm: 30, curious: 45, bold: 55 };
 
-export const ALL_KEEPSAKES = [
-  ...new Set([
-    ...Object.values(SPECIES_GROUPS).map((g) => g.keepsake),
-    ...Object.values(BUSINESS_CATEGORIES).map((c) => c.keepsake),
-    ...Object.values(KIND_KEEPSAKES).flat(),
-    ...Object.values(EXCLUSIVE_KEEPSAKES).flat(),
-    "petal",
-  ]),
-].sort();
+/** Wishes may only name keepsakes that can actually be found as glints. */
+export const ALL_KEEPSAKES = [...WISHABLE].sort();
 
 const CardSchema = z.object({
   name: z.string().min(2).max(28),
@@ -56,6 +55,8 @@ export type SpiritCard = CardContent & {
   model: string;
   moderation: { flagged: boolean; checked: boolean };
   status: "ready";
+  /** unlocked by granting the wish (generated lazily) */
+  secret_lore?: string;
 };
 
 export type PlaceSrc = {
@@ -198,9 +199,18 @@ export function templateCard(p: PlaceSrc): CardContent {
 }
 
 // ───────────────────────── generation ─────────────────────────
-async function generateContent(p: PlaceSrc, rarity: Rarity): Promise<{ content: CardContent; model: string; moderation: SpiritCard["moderation"] }> {
+export type WishHint = { keepsake_type: string; theme: string };
+
+async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint): Promise<{ content: CardContent; model: string; moderation: SpiritCard["moderation"] }> {
   const near = await nearbyPlaces(p).catch(() => []);
-  const user = prompt(p, near, rarity);
+  const user =
+    prompt(p, near, rarity) +
+    (hint
+      ? `\nWISH_HINT: this spirit's wish must use keepsake_type "${hint.keepsake_type}" and be about "${hint.theme}".` +
+        (exclusiveHoods(hint.keepsake_type).length
+          ? ` It can only be found in: ${exclusiveHoods(hint.keepsake_type).join(", ")}. The riddles should hint at that kind of place (never name it).`
+          : "")
+      : "");
   for (let attempt = 0, rateLimited = 0; attempt < 2; attempt++) {
     try {
       const res = await mistral().chat.complete({
@@ -219,7 +229,8 @@ async function generateContent(p: PlaceSrc, rarity: Rarity): Promise<{ content: 
         continue;
       }
       const c = parsed.data;
-      if (!ALL_KEEPSAKES.includes(c.wish.keepsake_type)) c.wish.keepsake_type = templateCard(p).wish.keepsake_type;
+      if (hint) c.wish.keepsake_type = hint.keepsake_type;
+      else if (!ALL_KEEPSAKES.includes(c.wish.keepsake_type)) c.wish.keepsake_type = templateCard(p).wish.keepsake_type;
       const texts = [c.name, c.persona, c.greeting, c.wish.riddle_1, c.wish.riddle_2, ...c.lore];
       const isFlagged = await flagged(texts).catch(() => false);
       if (isFlagged) {
@@ -250,7 +261,9 @@ async function generateContent(p: PlaceSrc, rarity: Rarity): Promise<{ content: 
 export const UNDER_VISITED = ["Excelsior", "Bayview Hunters Point", "Sunset/Parkside", "Visitacion Valley", "Oceanview/Merced/Ingleside", "Portola", "Outer Mission", "McLaren Park", "Lakeshore"];
 
 export async function linkWish(p: PlaceSrc, wish: { keepsake_type: string; theme: string }) {
-  const filter = [{ term: { keepsake_types: wish.keepsake_type } }];
+  // Exclusive keepsakes come from a neighbourhood, not from one kind of place.
+  const exHoods = exclusiveHoods(wish.keepsake_type);
+  const filter = exHoods.length ? [{ terms: { neighborhood: exHoods } }] : [{ term: { keepsake_types: wish.keepsake_type } }];
   const lexical = {
     function_score: {
       query: {
@@ -315,11 +328,11 @@ export async function getCachedCard(spiritId: string): Promise<SpiritCard | null
 }
 
 /** Get the spirit card for a place, generating it once citywide. */
-export function getOrCreateCard(placeId: string, date = sfDate(), opts: { redoTemplates?: boolean } = {}): Promise<SpiritCard> {
+export function getOrCreateCard(placeId: string, date = sfDate(), opts: { redoTemplates?: boolean; wishHint?: WishHint } = {}): Promise<SpiritCard> {
   const spiritId = `${placeId}:base`;
   let p = inflight.get(spiritId);
   if (!p) {
-    p = createCard(placeId, spiritId, date, opts.redoTemplates).finally(() => inflight.delete(spiritId));
+    p = createCard(placeId, spiritId, date, opts.redoTemplates, opts.wishHint).finally(() => inflight.delete(spiritId));
     inflight.set(spiritId, p);
   }
   return p;
@@ -328,7 +341,7 @@ export function getOrCreateCard(placeId: string, date = sfDate(), opts: { redoTe
 /** Template fallbacks are provisional: retried once they're 15 min old (or forced by pre-warm). */
 const TEMPLATE_RETRY_MS = 15 * 60_000;
 
-async function createCard(placeId: string, spiritId: string, date: string, redoTemplates = false): Promise<SpiritCard> {
+async function createCard(placeId: string, spiritId: string, date: string, redoTemplates = false, wishHint?: WishHint): Promise<SpiritCard> {
   const cached = await getCachedCard(spiritId);
   const stale = cached?.model === "template" && (redoTemplates || Date.now() - Date.parse(cached.generated_at) > TEMPLATE_RETRY_MS);
   if (cached && !stale) return cached;
@@ -350,7 +363,7 @@ async function createCard(placeId: string, spiritId: string, date: string, redoT
   if (!place) throw new Error(`unknown place ${placeId}`);
   const spawn = spawnFor({ id: place.id, kind: place.kind, rank: place.rank, tags: place.tags, openedAt: place.attrs.opened_at as string | undefined }, date);
   const rarity: Rarity = spawn?.rarity ?? "common";
-  const { content, model, moderation } = await generateContent(place, rarity);
+  const { content, model, moderation } = await generateContent(place, rarity, wishHint);
   const links = await linkWish(place, content.wish).catch(() => ({ target_place_ids: [], target_hoods: [] }));
   const card: SpiritCard = {
     ...content,
@@ -371,4 +384,33 @@ async function createCard(placeId: string, spiritId: string, date: string, redoT
   };
   await client.index({ index: INDEX.spirits, id: spiritId, document: card, refresh: true });
   return card;
+}
+
+/**
+ * The secret chapter a spirit shares when its wish is granted (spec §8.2).
+ * Generated once with the same guardrails, then cached on the card.
+ */
+export async function secretChapter(card: SpiritCard): Promise<string> {
+  if (card.secret_lore) return card.secret_lore;
+  const fallback = `${card.name} holds the gift close. "Now I'll tell you a secret," it whispers: "every wanderer who stops to listen becomes part of this place's story — and now so have you."`;
+  let text = fallback;
+  try {
+    const res = await mistral().chat.complete({
+      model: MODELS.persona,
+      temperature: 0.8,
+      maxTokens: 160,
+      messages: [
+        { role: "system", content: SYSTEM.split("Return ONLY")[0] + "Write ONE short secret chapter (2–3 sentences) the spirit shares after a wanderer granted its wish. Plain text only." },
+        {
+          role: "user",
+          content: `<CONTEXT>${JSON.stringify({ spirit: card.name, persona: card.persona, place: card.place_name, neighborhood: card.neighborhood, wish: card.wish.theme, gift: card.wish.keepsake_type, lore_so_far: card.lore })}</CONTEXT>`,
+        },
+      ],
+    });
+    const out = res.choices[0]?.message?.content;
+    const candidate = typeof out === "string" ? out.trim().replace(/^"|"$/g, "").slice(0, 420) : "";
+    if (candidate.length > 20 && !(await flagged([candidate]).catch(() => false))) text = candidate;
+  } catch {}
+  await es().update({ index: INDEX.spirits, id: card.spirit_id, doc: { secret_lore: text } }).catch(() => {});
+  return text;
 }

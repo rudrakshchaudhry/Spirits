@@ -50,7 +50,13 @@ export async function POST(req: Request) {
   if (friend && friend.status !== "met") {
     const lore = Math.min(card.lore.length, Math.max(1, friend.lore_unlocked + 1));
     await sb.from("friendships").update({ lore_unlocked: lore, last_visit_at: new Date().toISOString() }).eq("player_id", player.id).eq("spirit_id", spawn.id);
-    return NextResponse.json({ mode: "friend", spirit, place: placeOut, trust: friend.trust, lore: card.lore.slice(0, lore), greeting: card.greeting });
+    // Friends can still be given a gift (granting the wish makes the friendship rare).
+    const token = signEncounter({ u: player.id, s: spawn.id, p: place.id, t0: Date.now(), trust0: friend.trust, game: "rhythm", minMs: 0, exp: Date.now() + 15 * 60_000 });
+    const lorePlus = friend.status === "rare" && card.secret_lore ? [...card.lore.slice(0, lore), card.secret_lore] : card.lore.slice(0, lore);
+    return NextResponse.json({
+      mode: "friend", spirit, place: placeOut, trust: friend.trust, lore: lorePlus, greeting: card.greeting, token,
+      rare: friend.status === "rare", wishGranted: !!friend.wish_fulfilled_at,
+    });
   }
 
   if (cd && Date.parse(cd.until) > Date.now()) {
