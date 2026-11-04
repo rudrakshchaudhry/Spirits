@@ -79,6 +79,7 @@ export class WorldScene extends Phaser.Scene {
   private exploredSent = new Set<string>();
   private lastChunkKey = "";
   private lastExploreFlush = 0;
+  private exploreBackoffUntil = 0;
   private atmosphere!: Atmosphere;
   /** starter companion (spec §13.2): follows, reacts to nearby spirits, says things */
   private companion: Phaser.GameObjects.Sprite | null = null;
@@ -678,15 +679,18 @@ export class WorldScene extends Phaser.Scene {
       this.lastChunkKey = key;
       if (!this.exploredSent.has(key)) this.exploreQueue.add(key);
     }
-    if (this.exploreQueue.size && (this.exploreQueue.size >= 5 || time - this.lastExploreFlush > 8000)) {
+    // At most one report per 8 s (60 s after the server defers anything), ≤10 keys each.
+    if (this.exploreQueue.size && time >= this.exploreBackoffUntil && time - this.lastExploreFlush > 8000) {
       this.lastExploreFlush = time;
-      const batch = [...this.exploreQueue];
-      this.exploreQueue.clear();
-      batch.forEach((k) => this.exploredSent.add(k));
+      const batch = [...this.exploreQueue].slice(0, 10);
+      batch.forEach((k) => { this.exploreQueue.delete(k); this.exploredSent.add(k); });
       api<{ deferred?: string[] }>("/api/explore", { method: "POST", body: JSON.stringify({ chunks: batch }) }).then(
-        // the server paces new chunks; re-queue whatever it deferred
-        (r) => (r.deferred ?? []).forEach((k) => { this.exploredSent.delete(k); this.exploreQueue.add(k); }),
-        () => batch.forEach((k) => this.exploredSent.delete(k)),
+        (r) => {
+          const deferred = r.deferred ?? [];
+          deferred.forEach((k) => { this.exploredSent.delete(k); this.exploreQueue.add(k); });
+          if (deferred.length) this.exploreBackoffUntil = this.time.now + 60_000;
+        },
+        () => batch.forEach((k) => { this.exploredSent.delete(k); this.exploreQueue.add(k); }),
       );
     }
   }
