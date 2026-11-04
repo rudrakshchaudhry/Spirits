@@ -10,6 +10,7 @@ type Src = {
   location: { lat: number; lon: number };
   rank?: number;
   tags?: string[];
+  keepsake_types?: string[];
   attrs?: { species_group?: string; business_category?: string; opened_at?: string };
 };
 
@@ -23,7 +24,7 @@ export async function queryChunk(key: string, date: string): Promise<ChunkEntiti
   const res = await es().search<Src>({
     index: INDEX.places,
     size: MAX_PER_CHUNK,
-    _source: ["id", "kind", "name", "location", "rank", "tags", "attrs.species_group", "attrs.business_category", "attrs.opened_at"],
+    _source: ["id", "kind", "name", "location", "rank", "tags", "keepsake_types", "attrs.species_group", "attrs.business_category", "attrs.opened_at"],
     query: {
       bool: {
         filter: [
@@ -56,6 +57,7 @@ export async function queryChunk(key: string, date: string): Promise<ChunkEntiti
       name: s.name,
       look: s.attrs?.species_group ?? s.attrs?.business_category,
       rank: s.rank ?? 0,
+      ...(s.keepsake_types?.length ? { ks: s.keepsake_types } : {}),
       ...(spirit ? { spirit } : {}),
     });
   }

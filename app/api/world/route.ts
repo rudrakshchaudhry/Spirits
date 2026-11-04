@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { glintsForChunk, windowIndex } from "@/lib/keepsakes/glints";
 import { sfDate } from "@/lib/spirits/spawn";
 import type { WorldResponse } from "@/lib/world/entities";
 import { chunkEntities } from "@/lib/world/query";
@@ -20,10 +21,18 @@ export async function GET(req: NextRequest) {
   const dateParam = sp.get("date");
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : sfDate();
   try {
-    const chunks = await Promise.all(keys.map((k) => chunkEntities(k, date)));
-    const body: WorldResponse = { date, chunks };
+    // Glints change every 2-hour window: the client puts `w` in the URL so caches key on it.
+    const w = Number(sp.get("w"));
+    const win = Number.isFinite(w) && Math.abs(w - windowIndex()) <= 1 ? w : windowIndex();
+    const chunks = await Promise.all(
+      keys.map(async (k) => {
+        const c = await chunkEntities(k, date);
+        return { ...c, glints: glintsForChunk(k, c.entities, win) };
+      }),
+    );
+    const body: WorldResponse = { date, window: win, chunks };
     return NextResponse.json(body, {
-      headers: { "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400" },
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" },
     });
   } catch (e) {
     console.error("world query failed", e);

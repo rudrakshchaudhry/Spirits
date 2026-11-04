@@ -5,6 +5,10 @@ import { CHUNK_TILES, TILE_PX, chunkKey, latLonToTile, tileToLatLon } from "@/li
 import type { ChunkStore } from "@/lib/world/chunks";
 import type { Entity } from "@/lib/world/entities";
 import { EntityStore } from "@/lib/world/entityStore";
+import { api } from "@/lib/game/api";
+import { keepsake } from "@/lib/keepsakes/catalog";
+import { type Glint, windowIndex } from "@/lib/keepsakes/glints";
+import type { InventoryResponse } from "@/lib/encounter/types";
 import { type Hood, hoodAt, taglineFor } from "@/lib/world/neighborhoods";
 import { TERRAIN_COLORS, TERRAIN_COUNT, T, terrainOf } from "@/lib/world/terrain";
 import { WANDERER_FRAME, drawTileset, drawWanderer } from "./art";
@@ -60,6 +64,17 @@ export class WorldScene extends Phaser.Scene {
   private entities = new EntityStore();
   /** today's visible spirits, keyed by spirit id (Checkpoint C uses this for approach) */
   readonly spirits = new Map<string, LiveSpirit>();
+  /** keepsake glints on the ground (spec §10) */
+  private glints = new Map<string, { g: Glint; img: Phaser.GameObjects.Sprite; x: number; y: number }>();
+  private claimed = new Set<string>();
+  private pickupPending = new Set<string>();
+  private glintWindow = windowIndex();
+  private lastGlintCheck = 0;
+  /** chunks walked through, flushed to /api/explore in small batches */
+  private exploreQueue = new Set<string>();
+  private exploredSent = new Set<string>();
+  private lastChunkKey = "";
+  private lastExploreFlush = 0;
 
   constructor() {
     super("world");
@@ -102,6 +117,15 @@ export class WorldScene extends Phaser.Scene {
       if (!st.encounter) useGame.setState({ atlasOpen: !st.atlasOpen });
     });
     this.makeHeart();
+    this.makeGlint();
+    // glints this player already picked up this window
+    api<InventoryResponse>("/api/inventory").then(
+      (r) => {
+        r.claimed.forEach((id) => this.claimed.add(id));
+        for (const [id, gl] of this.glints) if (this.claimed.has(id)) { gl.img.destroy(); this.glints.delete(id); }
+      },
+      () => {},
+    );
 
     this.unsub.push(
       bus.on("player:teleport", ({ x, y }) => {
@@ -137,6 +161,28 @@ export class WorldScene extends Phaser.Scene {
       ["down", "left", "right", "up"].forEach((d, di) => {
         for (let f = 0; f < 3; f++) tex.add(`${d}-${f}`, 0, f * F, di * F, F, F);
       });
+    }
+  }
+
+  private makeGlint() {
+    if (this.textures.exists("glint")) return;
+    const tex = this.textures.createCanvas("glint", 40, 10)!;
+    const c = tex.getContext();
+    const sizes = [1, 2, 3, 2];
+    sizes.forEach((r, f) => {
+      const ox = f * 10 + 5, oy = 5;
+      c.fillStyle = "rgba(255,240,170,0.35)";
+      c.fillRect(ox - r - 1, oy - r - 1, (r + 1) * 2 + 1, (r + 1) * 2 + 1);
+      c.fillStyle = "#fff6c8";
+      c.fillRect(ox, oy - r - 1, 1, (r + 1) * 2 + 1);
+      c.fillRect(ox - r - 1, oy, (r + 1) * 2 + 1, 1);
+      c.fillStyle = "#ffffff";
+      c.fillRect(ox, oy, 1, 1);
+      tex.add(f, 0, f * 10, 0, 10, 10);
+    });
+    tex.refresh();
+    if (!this.anims.exists("glint:twinkle")) {
+      this.anims.create({ key: "glint:twinkle", frames: [0, 1, 2, 3, 2, 1].map((frame) => ({ key: "glint", frame })), frameRate: 6, repeat: -1 });
     }
   }
 
@@ -267,6 +313,12 @@ export class WorldScene extends Phaser.Scene {
       const ll = tileToLatLon(this.pos.x, this.pos.y);
       useGame.setState({ player: { x: this.pos.x, y: this.pos.y, lat: ll.lat, lon: ll.lon } });
     }
+    if (time - this.lastGlintCheck > 100) {
+      this.lastGlintCheck = time;
+      this.checkGlints();
+      this.trackExploration(time);
+      if (windowIndex() !== this.glintWindow) this.refreshGlints();
+    }
     if (time - this.lastHoodCheck > 250) {
       this.lastHoodCheck = time;
       this.checkNeighborhood();
@@ -358,7 +410,10 @@ export class WorldScene extends Phaser.Scene {
     if (!this.chunks.manifest.chunks.includes(key)) return; // open water: nothing lives here
     this.entities.load(key).then(
       (list) => {
-        if (this.layers.get(key) === entry && entry.objects.length === 0) this.populate(entry, list);
+        if (this.layers.get(key) === entry && entry.objects.length === 0) {
+          this.populate(entry, list.entities);
+          this.addGlints(entry, list.glints);
+        }
       },
       (e) => console.warn("world entities", key, e),
     );
@@ -369,6 +424,8 @@ export class WorldScene extends Phaser.Scene {
     for (const o of l.objects) {
       const id = o.getData("spiritId");
       if (id) this.spirits.delete(id);
+      const gid = o.getData("glintId");
+      if (gid) this.glints.delete(gid);
       o.destroy();
     }
     l.objects.length = 0;
@@ -416,6 +473,88 @@ export class WorldScene extends Phaser.Scene {
           return d === 0 ? { x, y } : { x: tx + 0.5, y: ty + 0.7 };
         }
     return { x, y };
+  }
+
+  /** Nearest tile of `terrain` within r tiles. */
+  private nearestTerrain(x: number, y: number, terrain: number, r: number): { x: number; y: number } | null {
+    const sx = Math.floor(x), sy = Math.floor(y);
+    for (let d = 0; d <= r; d++)
+      for (let dy = -d; dy <= d; dy++)
+        for (let dx = -d; dx <= d; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== d) continue;
+          const t = this.chunks.tileAt(sx + dx, sy + dy);
+          if (t !== undefined && terrainOf(t) === terrain) return { x: sx + dx + 0.5, y: sy + dy + 0.6 };
+        }
+    return null;
+  }
+
+  private addGlints(l: ChunkLayer, glints: Glint[]) {
+    for (const g of glints) {
+      if (this.claimed.has(g.id) || this.glints.has(g.id)) continue;
+      const at = g.snap === "sand" ? this.nearestTerrain(g.x, g.y, T.SAND, 28) : this.nearestOpen(g.x, g.y, 4);
+      if (!at) continue;
+      const img = this.add.sprite(at.x * TILE_PX, at.y * TILE_PX, "glint", 0).setOrigin(0.5, 1).setDepth(at.y * TILE_PX - 1);
+      img.play({ key: "glint:twinkle", startFrame: g.id.length % 4 });
+      img.setData("glintId", g.id);
+      l.objects.push(img);
+      this.glints.set(g.id, { g, img, x: at.x, y: at.y });
+    }
+  }
+
+  /** Walk over a glint → claim it (server validates). */
+  private checkGlints() {
+    for (const [id, gl] of this.glints) {
+      if (this.pickupPending.has(id)) continue;
+      if (Math.hypot(gl.x - this.pos.x, gl.y - this.pos.y) > 0.85) continue;
+      this.pickupPending.add(id);
+      gl.img.setAlpha(0.4);
+      api<{ type: string; qty: number; full: boolean; wishedBy: string[] }>("/api/pickup", { method: "POST", body: JSON.stringify({ glintId: id }) })
+        .then((r) => {
+          const label = keepsake(r.type).label;
+          const text = r.wishedBy.length
+            ? `Picked up a ${label}. ♪ ${r.wishedBy[0]} would love this…`
+            : `Picked up a ${label}${r.full ? " (your pocket for these is full)" : ""}.`;
+          useGame.setState({ toast: { text, at: Date.now() } });
+          this.claimed.add(id);
+          gl.img.destroy();
+          this.glints.delete(id);
+        })
+        .catch((e: Error) => {
+          if (/already|faded|nothing/.test(e.message)) {
+            this.claimed.add(id);
+            gl.img.destroy();
+            this.glints.delete(id);
+          } else gl.img.setAlpha(1);
+        })
+        .finally(() => this.pickupPending.delete(id));
+    }
+  }
+
+  /** New 2-hour window: drop old glints and fetch the new set for loaded chunks. */
+  private refreshGlints() {
+    this.glintWindow = windowIndex();
+    for (const [, gl] of this.glints) gl.img.destroy();
+    this.glints.clear();
+    for (const [key, l] of this.layers) {
+      l.objects = l.objects.filter((o) => o.active);
+      if (!this.chunks.manifest.chunks.includes(key)) continue;
+      this.entities.load(key).then((c) => this.layers.get(key) === l && this.addGlints(l, c.glints), () => {});
+    }
+  }
+
+  private trackExploration(time: number) {
+    const key = chunkKey(Math.floor(this.pos.x / CHUNK_TILES), Math.floor(this.pos.y / CHUNK_TILES));
+    if (key !== this.lastChunkKey) {
+      this.lastChunkKey = key;
+      if (!this.exploredSent.has(key)) this.exploreQueue.add(key);
+    }
+    if (this.exploreQueue.size && (this.exploreQueue.size >= 5 || time - this.lastExploreFlush > 8000)) {
+      this.lastExploreFlush = time;
+      const batch = [...this.exploreQueue];
+      this.exploreQueue.clear();
+      batch.forEach((k) => this.exploredSent.add(k));
+      api("/api/explore", { method: "POST", body: JSON.stringify({ chunks: batch }) }).catch(() => batch.forEach((k) => this.exploredSent.delete(k)));
+    }
   }
 
   private populate(l: ChunkLayer, list: Entity[]) {

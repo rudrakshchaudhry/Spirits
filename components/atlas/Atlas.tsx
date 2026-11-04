@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import SpiritPortrait from "@/components/encounter/SpiritPortrait";
+import KeepsakeIcon from "@/components/KeepsakeIcon";
+import { keepsake } from "@/lib/keepsakes/catalog";
+import AtlasMap from "./AtlasMap";
 import { api } from "@/lib/game/api";
 import { useGame } from "@/lib/game/store";
 import { FAMILY_LABEL, RARITY_STYLE } from "@/lib/spirits/labels";
@@ -17,11 +20,17 @@ type Entry = {
   look: string | null;
   sprite_seed: number;
   lore: string[];
-  wish: { theme: string; keepsake: string; riddles: string[]; glowHoods: string[] } | null;
+  wish: { theme: string; keepsake: string; riddles: string[]; glowHoods: string[]; granted: boolean } | null;
 };
-type AtlasData = { friends: Entry[]; met: Entry[]; stats: { friends: number; met: number; neighborhoods: number } };
+type AtlasData = {
+  friends: Entry[];
+  met: Entry[];
+  inventory: Record<string, number>;
+  explored: Record<string, number>;
+  stats: { friends: number; met: number; neighborhoods: number; explored: number; keepsakes: number };
+};
 
-const TABS = ["Friends", "Met", "Wishes"] as const;
+const TABS = ["Friends", "Met", "Wishes", "Keepsakes", "Map"] as const;
 
 /** Spirit Atlas (spec §13.4). Never shows exact positions of undiscovered spirits. */
 export default function Atlas() {
@@ -63,7 +72,7 @@ export default function Atlas() {
                 <h2 className="font-pixel text-2xl">Spirit Atlas</h2>
                 {data && (
                   <p className="text-xs text-slate-400">
-                    {data.stats.friends} friends · {data.stats.met} met · {data.stats.neighborhoods} neighborhoods
+                    {data.stats.friends} friends · {data.stats.met} met · {data.stats.explored} neighborhoods explored · {data.stats.keepsakes} keepsakes
                   </p>
                 )}
               </div>
@@ -71,7 +80,7 @@ export default function Atlas() {
                 Close
               </button>
             </div>
-            <div className="flex gap-1 px-4 pt-3">
+            <div className="flex flex-wrap gap-1 px-4 pt-3">
               {TABS.map((t) => (
                 <button
                   key={t}
@@ -86,7 +95,7 @@ export default function Atlas() {
             <div className="min-h-48 overflow-y-auto p-4">
               {err && <p className="text-sm text-rose-300">{err}</p>}
               {!data && !err && <p className="font-pixel animate-pulse text-slate-400 motion-reduce:animate-none">Opening the Atlas…</p>}
-              {data && tab !== "Wishes" && (
+              {data && (tab === "Friends" || tab === "Met") && (
                 <List
                   entries={tab === "Friends" ? data.friends : data.met}
                   empty={tab === "Friends" ? "No friends yet. Walk up to a spirit and press E." : "Spirits you’ve met but not befriended appear here."}
@@ -95,6 +104,10 @@ export default function Atlas() {
                 />
               )}
               {data && tab === "Wishes" && <Wishes entries={[...data.met, ...data.friends].filter((e) => e.wish?.riddles.length)} />}
+              {data && tab === "Keepsakes" && <Keepsakes items={data.inventory} />}
+              {data && tab === "Map" && (
+                <AtlasMap explored={data.explored} glow={[...new Set([...data.met, ...data.friends].flatMap((e) => e.wish?.glowHoods ?? []))]} />
+              )}
             </div>
           </div>
         </div>
@@ -115,6 +128,7 @@ function List({ entries, empty, expanded, onToggle }: { entries: Entry[]; empty:
               <div className="flex items-center gap-2">
                 <span className="font-pixel text-lg leading-none">{e.spirit_name}</span>
                 <span className={`rounded px-1 text-[9px] font-semibold uppercase ${RARITY_STYLE[e.rarity]}`}>{e.rarity}</span>
+                {e.status === "rare" && <span className="text-[10px] text-fuchsia-200">✦ rare friend</span>}
               </div>
               <p className="truncate text-xs text-slate-400">
                 {FAMILY_LABEL[e.family]} · {e.place_name}
@@ -154,11 +168,33 @@ function Wishes({ entries }: { entries: Entry[] }) {
               ✦ {r}
             </p>
           ))}
-          {e.wish!.glowHoods.length > 0 ? (
+          {e.wish!.granted ? (
+            <p className="mt-2 text-xs text-fuchsia-200">✦ Wish granted</p>
+          ) : e.wish!.glowHoods.length > 0 ? (
             <p className="mt-2 text-xs text-emerald-200">Your Atlas glows toward: {e.wish!.glowHoods.join(", ")}</p>
           ) : (
             <p className="mt-2 text-xs text-slate-500">Hear its second riddle and the Atlas will glow toward where to look.</p>
           )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Keepsakes({ items }: { items: Record<string, number> }) {
+  const entries = Object.entries(items).sort((a, b) => keepsake(a[0]).theme.localeCompare(keepsake(b[0]).theme));
+  if (!entries.length) return <p className="text-sm text-slate-400">No keepsakes yet. Walk over the little glints you see on the ground.</p>;
+  return (
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {entries.map(([type, qty]) => (
+        <li key={type} className="flex items-center gap-2 rounded-lg bg-white/5 p-2">
+          <KeepsakeIcon type={type} size={28} />
+          <div className="min-w-0">
+            <p className="truncate text-sm text-slate-100">{keepsake(type).label}</p>
+            <p className="text-xs text-slate-400">
+              {keepsake(type).theme} · ×{qty}
+            </p>
+          </div>
         </li>
       ))}
     </ul>

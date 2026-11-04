@@ -19,6 +19,12 @@ Encounters: meet (Mistral-written spirit + streamed greeting + wish riddle) → 
 (Rustle rhythm game, or Take Two film trivia for film echoes) → befriend at 100 trust.
 Progress is saved in Supabase under a per-device guest account.
 
+Keepsakes: glints on the ground (new set every 2 hours, typed by the real places nearby;
+sea shells only on the Pacific beaches). Walk over one to pick it up. Offer keepsakes to
+spirits: the wished-for one grants the wish (+40 trust, rare friendship, secret chapter).
+`npx tsx scripts/curate-quest.ts` sets up the Tenderloin → Ocean Beach sea-shell quest;
+`npx tsx scripts/e2e-quest.ts <placeId>` checks the whole loop against a running server.
+
 ## Terrain bake
 
 Baked output (`public/chunks/`, `public/minimap.png`, `public/neighborhoods.json`) is committed,

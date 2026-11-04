@@ -3,8 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bus } from "@/lib/game/bus";
 import { accessToken, api } from "@/lib/game/api";
 import { useGame } from "@/lib/game/store";
-import type { PlayResponse, StartResponse } from "@/lib/encounter/types";
+import type { GiftResponse, PlayResponse, StartResponse } from "@/lib/encounter/types";
 import { FAMILY_LABEL, RARITY_STYLE } from "@/lib/spirits/labels";
+import GiftPanel from "./GiftPanel";
 import RhythmGame from "./RhythmGame";
 import SpiritPortrait from "./SpiritPortrait";
 import TriviaGame from "./TriviaGame";
@@ -42,6 +43,8 @@ export default function EncounterDialog() {
   const [result, setResult] = useState<PlayResponse | null>(null);
   const [shownTrust, setShownTrust] = useState(0);
   const [error, setError] = useState("");
+  const [giftOpen, setGiftOpen] = useState(false);
+  const [gift, setGift] = useState<GiftResponse | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   const close = useCallback(() => {
@@ -61,6 +64,8 @@ export default function EncounterDialog() {
       setData(null);
       setResult(null);
       setGreeting("");
+      setGiftOpen(false);
+      setGift(null);
       try {
         const res = await api<StartResponse>("/api/encounter/start", { method: "POST", body: JSON.stringify({ placeId: ref.placeId }), signal: ac.signal });
         if (cancelled) return;
@@ -126,12 +131,26 @@ export default function EncounterDialog() {
     [data, dev],
   );
 
+  const onGift = useCallback(
+    (g: GiftResponse) => {
+      setGift(g);
+      setGiftOpen(false);
+      if (g.outcome === "declined" || !data) return;
+      setShownTrust(g.trust);
+      if (g.befriended) {
+        useGame.setState((s) => ({ friends: { ...s.friends, [data.spirit.id]: true } }));
+        bus.emit("spirit:befriended", { spiritId: data.spirit.id });
+      }
+    },
+    [data],
+  );
+
   // keyboard: Esc closes, Space/Enter advances from meet/result
   useEffect(() => {
     if (!ref) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && phase !== "play") close();
-      if ((e.code === "Space" || e.code === "Enter") && !e.repeat) {
+      if ((e.code === "Space" || e.code === "Enter") && !e.repeat && !giftOpen) {
         if (phase === "meet") {
           e.preventDefault();
           setPhase("play");
@@ -143,7 +162,7 @@ export default function EncounterDialog() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [ref, phase, close]);
+  }, [ref, phase, close, giftOpen]);
 
   if (!ref) return null;
   const sp = data?.spirit;
@@ -216,9 +235,11 @@ export default function EncounterDialog() {
           {phase === "result" && result && data && (
             <>
               <TrustMeter value={shownTrust} from={data.trust} />
-              {result.befriended ? (
+              {result.befriended || (gift && gift.outcome !== "declined" && gift.befriended) ? (
                 <div className="space-y-2">
-                  <p className="font-pixel text-xl text-rose-200">♥ {data.spirit.name} is now your friend!</p>
+                  <p className="font-pixel text-xl text-rose-200">
+                    {gift?.rare ? "✦" : "♥"} {data.spirit.name} is now your {gift?.rare ? "rare " : ""}friend!
+                  </p>
                   {result.lore && <p className="rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">{result.lore}</p>}
                   <p className="text-xs text-slate-400">Saved to your Spirit Atlas (B).</p>
                 </div>
@@ -247,6 +268,33 @@ export default function EncounterDialog() {
                   {l}
                 </p>
               ))}
+            </div>
+          )}
+
+
+          {(phase === "result" || phase === "friend") && data && data.mode !== "wandering" && (
+            <div className="space-y-2">
+              {gift && (
+                <div className={`rounded-md px-3 py-2 text-sm ${gift.outcome === "wish" ? "bg-fuchsia-500/15 text-fuchsia-100" : gift.outcome === "theme" ? "bg-amber-500/10 text-amber-100" : "bg-white/5 text-slate-300"}`}>
+                  <p>{gift.line}</p>
+                  {gift.outcome !== "declined" && <p className="mt-1 text-xs opacity-80">Trust {Math.min(100, gift.trust)} / 100{gift.rare ? " · rare friendship ✦" : gift.befriended ? " · friends ♥" : ""}</p>}
+                  {gift.secret && <p className="mt-2 border-t border-white/10 pt-2 italic">✦ {gift.secret}</p>}
+                </div>
+              )}
+              {giftOpen ? (
+                <GiftPanel token={data.token} onResult={onGift} onCancel={() => setGiftOpen(false)} />
+              ) : (
+                (() => {
+                  const canGift =
+                    (phase === "result" && !result?.befriended && !(gift && gift.outcome !== "declined" && gift.befriended)) ||
+                    (phase === "friend" && data.mode === "friend" && !data.wishGranted && gift?.outcome !== "wish");
+                  return canGift ? (
+                    <button type="button" onClick={() => setGiftOpen(true)} className="rounded-md border border-amber-200/30 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-100/10">
+                      Offer a keepsake…
+                    </button>
+                  ) : null;
+                })()
+              )}
             </div>
           )}
 

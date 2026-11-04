@@ -22,6 +22,7 @@ import {
   WORLD_TILES_W,
   latLonToTile,
 } from "../lib/geo/projection";
+import { type Hood, hoodAt } from "../lib/world/neighborhoods";
 import { EDGE_MASKED, T, TERRAIN_COLORS } from "../lib/world/terrain";
 
 const RAW = join(process.cwd(), "data/raw");
@@ -511,4 +512,37 @@ function simplify(pts: Pt[], tol: number): Pt[] {
   });
   writeFileSync(join(PUB, "neighborhoods.json"), JSON.stringify(out));
   console.log(`✓ neighborhoods.json (${out.length})`);
+
+  // ───────────────────────── 10. per-chunk meta (server-side lookups) ─────────────────────────
+  // Dominant neighbourhood + terrain counts per chunk. Bundled into server code
+  // (glint placement, explored-% per neighbourhood) via lib/world/chunk-meta.json.
+  const hoodsRt = out as unknown as Hood[];
+  const names = hoodsRt.map((h) => h.name);
+  const chunks: Record<string, [number, number, number, number]> = {};
+  for (const key of chunkList) {
+    const [cx, cy] = key.split("_").map(Number);
+    const votes = new Map<number, number>();
+    let sand = 0, grass = 0, water = 0;
+    for (let y = 0; y < CHUNK_TILES; y++) {
+      const wy = cy * CHUNK_TILES + y;
+      if (wy >= H) break;
+      for (let x = 0; x < CHUNK_TILES; x++) {
+        const wx = cx * CHUNK_TILES + x;
+        if (wx >= W) break;
+        const c = grid[wy * W + wx];
+        if (c === T.SAND) sand++;
+        else if (c === T.GRASS || c === T.FOREST) grass++;
+        else if (c === T.DEEP || c === T.WATER) water++;
+      }
+    }
+    for (let sy = 4; sy < CHUNK_TILES; sy += 8)
+      for (let sx = 4; sx < CHUNK_TILES; sx += 8) {
+        const h = hoodAt(hoodsRt, cx * CHUNK_TILES + sx, cy * CHUNK_TILES + sy);
+        if (h) { const i = names.indexOf(h.name); votes.set(i, (votes.get(i) ?? 0) + 1); }
+      }
+    const dom = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
+    chunks[key] = [dom, sand, grass, water];
+  }
+  writeFileSync(join(process.cwd(), "lib/world/chunk-meta.json"), JSON.stringify({ version, hoods: names, chunks }));
+  console.log(`✓ lib/world/chunk-meta.json (${Object.keys(chunks).length} chunks)`);
 }
