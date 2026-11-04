@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { INDEX, es } from "@/lib/es/client";
 import { MODELS, flagged, mistral } from "@/lib/mistral/client";
-import { WISHABLE } from "@/lib/keepsakes/catalog";
+import { WISHABLE, ensureRiddleNamesKeepsake, stripMarkdown } from "@/lib/keepsakes/catalog";
 import { BUSINESS_CATEGORIES, EXCLUSIVE_KEEPSAKES, SPECIES_GROUPS } from "@/lib/places/catalog";
 
 /** Neighbourhoods where an exclusive keepsake (sea shell, paper lantern…) can be found. */
@@ -150,8 +150,8 @@ Return ONLY a JSON object with exactly these keys:
  "wish": {
    "keepsake_type": one of KEEPSAKE_TYPES (pick something from ELSEWHERE in the city, not from this place),
    "theme": string (≤ 8 words, what the wish is about, e.g. "the sound of the sea"),
-   "riddle_1": string (a gentle riddle hinting at the keepsake and where it might be found, never naming the exact place),
-   "riddle_2": string (a second, slightly clearer hint)
+   "riddle_1": string (a gentle riddle about the KEEPSAKE ITSELF — what it looks or feels like, or what kind of place yields it — never naming the exact place),
+   "riddle_2": string (a second, clearer riddle that names the keepsake, e.g. "…a shell that still hums with the sea")
  },
  "lore": [string, string, string] (three short chapters, each 1–3 sentences, unlocked over repeat visits; facts only from CONTEXT)
 }`;
@@ -245,6 +245,9 @@ async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint, var
       const c = parsed.data;
       if (hint) c.wish.keepsake_type = hint.keepsake_type;
       else if (!ALL_KEEPSAKES.includes(c.wish.keepsake_type)) c.wish.keepsake_type = templateCard(p).wish.keepsake_type;
+      // the clearer riddle must actually point at the wished keepsake
+      c.wish.riddle_1 = stripMarkdown(c.wish.riddle_1);
+      c.wish.riddle_2 = ensureRiddleNamesKeepsake(c.wish.riddle_2, c.wish.keepsake_type);
       const texts = [c.name, c.persona, c.greeting, c.wish.riddle_1, c.wish.riddle_2, ...c.lore];
       const isFlagged = await flagged(texts).catch(() => false);
       if (isFlagged) {

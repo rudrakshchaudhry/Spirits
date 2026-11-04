@@ -229,3 +229,19 @@ describe("revisit wishes (spec §8.4)", () => {
     expect(k).not.toBe("crumb");
   });
 });
+
+describe("wish riddles point at the keepsake", () => {
+  it("names the key noun or appends a plain hint", async () => {
+    const { keyNoun, ensureRiddleNamesKeepsake } = await import("@/lib/keepsakes/catalog");
+    expect(keyNoun("palm_frond")).toBe("frond");
+    expect(keyNoun("old_brass_key")).toBe("key");
+    expect(keyNoun("dog_eared_page")).toBe("page");
+    const ok = "Find the long green fronds that rustle by the sea.";
+    expect(ensureRiddleNamesKeepsake(ok, "palm_frond")).toBe(ok); // plural accepted
+    const drift = "I am not a book, yet I hold countless tales.";
+    expect(ensureRiddleNamesKeepsake(drift, "palm_frond")).toBe(`${drift} (Look for a palm frond.)`);
+    expect(ensureRiddleNamesKeepsake("A shell that hums.", "sea_shell")).toBe("A shell that hums.");
+    expect(ensureRiddleNamesKeepsake("what am I, if not a **palm frond** to keep?", "palm_frond")).toBe("what am I, if not a palm frond to keep?");
+    expect(ensureRiddleNamesKeepsake("A keyhole story.", "old_brass_key")).toMatch(/Look for an old brass key/); // "keyhole" ≠ "key"
+  });
+});

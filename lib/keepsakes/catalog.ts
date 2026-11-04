@@ -81,3 +81,26 @@ export const REFERENCED = [
 ];
 
 export const MAX_STACK = 20;
+
+/** Models sometimes add **bold** / *italics*; the game shows plain text. */
+export const stripMarkdown = (s: string) => s.replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1").replace(/\*/g, "").trim();
+
+/** The word a riddle must use to point at a keepsake: "palm frond" → "frond", "old brass key" → "key". */
+export function keyNoun(type: string): string {
+  const words = keepsake(type).label.toLowerCase().replace(/[^a-z\s-]/g, "").split(/[\s-]+/).filter(Boolean);
+  return words[words.length - 1] ?? type;
+}
+
+/**
+ * Guardrail for wish riddles: the clearer (second) riddle must name the
+ * keepsake's key noun (singular or plural). If the model drifted (e.g. book
+ * riddles for a palm frond), append a plain hint instead of trusting it.
+ */
+export function ensureRiddleNamesKeepsake(raw: string, type: string): string {
+  const riddle = stripMarkdown(raw);
+  const noun = keyNoun(type);
+  const re = new RegExp(`\\b${noun.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(e?s)?\\b`, "i");
+  if (re.test(riddle)) return riddle;
+  const label = keepsake(type).label;
+  return `${riddle.replace(/\s+$/, "")} (Look for ${/^[aeiou]/i.test(label) ? "an" : "a"} ${label}.)`;
+}
