@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devConditionsAllowed } from "@/lib/conditions/server";
 import { verifyEncounter } from "@/lib/encounter/token";
 import { getCachedCard } from "@/lib/spirits/card";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
@@ -24,46 +25,24 @@ export async function POST(req: Request) {
   const score = Math.max(0, Math.min(1, Number(body.score) || 0));
 
   const sb = supabaseAdmin();
-  const { data: friend } = await sb.from("friendships").select("*").eq("player_id", player.id).eq("spirit_id", claims.s).maybeSingle();
+  const { data: friend } = await sb.from("friendships").select("rarity").eq("player_id", player.id).eq("spirit_id", claims.s).maybeSingle();
   if (!friend) return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
-  if (friend.status !== "met") return NextResponse.json({ trust: friend.trust, befriended: true, already: true });
-  // A spirit that wandered off can't be played again until it returns (no retry via a second token).
-  const { data: cd } = await sb.from("encounter_cooldowns").select("until").eq("player_id", player.id).eq("spirit_id", claims.s).maybeSingle();
-  if (cd && Date.parse(cd.until) > Date.now()) return NextResponse.json({ error: "the spirit has wandered off for now" }, { status: 409 });
-  // Single-use tokens: atomically claim this token's issue time; replays and older tokens lose.
-  // (Overlapping /start calls don't invalidate each other — only a recorded play does.)
-  const { data: claimed } = await sb
-    .from("friendships")
-    .update({ last_play_t0: claims.t0 })
-    .eq("player_id", player.id)
-    .eq("spirit_id", claims.s)
-    .or(`last_play_t0.is.null,last_play_t0.lt.${Math.floor(claims.t0)}`)
-    .select("spirit_id");
-  if (!claimed?.length) return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
-
+  // The demo cooldown (20 s, so a stage demo can retry) is only for dev/demo builds; matches the
+  // other demo checks, and a client flag alone is never trusted.
+  const ms = body.demo && devConditionsAllowed() ? 20_000 : (friend.rarity === "legendary" ? 30 : 10) * 60_000;
   const gained = Math.round(score * 60);
-  const trust = Math.min(200, claims.trust0 + gained);
-  const befriended = trust >= 100;
-  const now = new Date();
-  await sb
-    .from("friendships")
-    .update({
-      trust,
-      status: befriended ? "befriended" : "met",
-      befriended_at: befriended ? now.toISOString() : null,
-      lore_unlocked: befriended ? 1 : friend.lore_unlocked,
-      last_visit_at: now.toISOString(),
-    })
-    .eq("player_id", player.id)
-    .eq("spirit_id", claims.s);
-
-  if (befriended) {
+  // atomic: row lock → still 'met' → not wandered off → single-use token → trust += gained on the
+  // stored value (a gift given mid-encounter is kept) → befriend, or wander off
+  const { data, error } = await sb.rpc("record_play", { p_player: player.id, p_spirit: claims.s, p_t0: Math.floor(claims.t0), p_gain: gained, p_cooldown_ms: ms });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const r = data as { result: string; trust?: number; befriended?: boolean; until?: string };
+  if (r.result === "already") return NextResponse.json({ trust: r.trust, befriended: true, already: true });
+  if (r.result === "wandering") return NextResponse.json({ error: "the spirit has wandered off for now" }, { status: 409 });
+  if (r.result === "used") return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
+  if (r.result !== "ok") return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
+  if (r.befriended) {
     const card = await getCachedCard(claims.s);
-    return NextResponse.json({ trust, gained, befriended: true, lore: card?.lore[0] ?? null });
+    return NextResponse.json({ trust: r.trust, gained, befriended: true, lore: card?.lore[0] ?? null });
   }
-  // Demo mode (?dev=1) shortens the wander-off so a stage demo can retry.
-  const ms = body.demo ? 20_000 : (friend.rarity === "legendary" ? 30 : 10) * 60_000;
-  const until = new Date(now.getTime() + ms).toISOString();
-  await sb.from("encounter_cooldowns").upsert({ player_id: player.id, spirit_id: claims.s, until });
-  return NextResponse.json({ trust, gained, befriended: false, wanderedUntil: until });
+  return NextResponse.json({ trust: r.trust, gained, befriended: false, wanderedUntil: new Date(r.until!).toISOString() });
 }

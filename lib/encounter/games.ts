@@ -103,7 +103,7 @@ export async function triviaFor(p: PlaceSrc, rarity: Rarity): Promise<GameConten
     index: INDEX.places,
     size: 40,
     _source: ["attrs.film_title", "attrs.film_year", "attrs.director", "attrs.actors", "attrs.writer"],
-    query: { function_score: { query: { term: { kind: "film" } }, functions: [{ random_score: { seed, field: "_seq_no" } }] } },
+    query: { function_score: { query: { term: { kind: "film" } }, functions: [{ random_score: { seed, field: "id" } }] } },
   });
   const others = r.hits.hits.map((h) => h._source!.attrs).filter((o) => o.film_title !== a.film_title);
   const pool = (get: (o: typeof a) => string | undefined, correct: string) =>

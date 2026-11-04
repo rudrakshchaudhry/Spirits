@@ -293,7 +293,7 @@ export async function linkWish(p: PlaceSrc, wish: { keepsake_type: string; theme
       functions: [
         { filter: { terms: { neighborhood: UNDER_VISITED } }, weight: 1.6 },
         { gauss: { location: { origin: p.location, scale: "6km", offset: "1km", decay: 0.5 } } },
-        { random_score: { seed: hash32(p.id), field: "_seq_no" }, weight: 0.3 },
+        { random_score: { seed: hash32(p.id), field: "id" }, weight: 0.3 },
       ],
       score_mode: "sum",
       boost_mode: "multiply",
