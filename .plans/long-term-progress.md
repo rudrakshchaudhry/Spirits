@@ -38,14 +38,16 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - [x] Dev panel (?dev=1, server needs ALLOW_DEV_CONDITIONS=1): force conditions, teleport, ★ featured, grant keepsakes
 - [x] Cron routes + vercel.json (CRON_SECRET): refresh-311 hourly (needs Vercel Pro; hobby = daily), new-business daily, featured daily
 
-## G: Together (branch `checkpoint-g`)
-- [ ] Onboarding: handle, home neighborhood (crew), companion pick (Mote/Sprig/Tidepip)
-- [ ] Companion follows, reacts to nearby spirits, evolves (3 forms), trait absorption
-- [ ] Milestone unlocks + "next goal" HUD; demo-mode unlock-all
-- [ ] Crew board (weekly score, materialized view)
-- [ ] Trading (execute_trade SQL function, limits)
-- [ ] Profiles
-- [ ] Gatherings: events, GPS check-in (no raw coords stored), Realtime lobby, co-op rhythm
+## G: Together (branch `checkpoint-g`) ✅
+- [x] Onboarding: moderated handle, home neighbourhood (crew, change every 30 days), companion; spawn in a home park
+- [x] Companion follows, "!" near spirits, templated lines, 3 forms, trait absorption from top neighbourhoods
+- [x] Milestone unlocks + one "next goal" HUD line; demo mode unlocks all (server-gated)
+- [x] Crew board: `crew_scores()` SQL function (weekly, normalised by active members), cached 10 min
+- [x] Trading: keepsakes only, limits (10/day, ≤5 per item), atomic `execute_trade` with row locks; counter/decline/cancel
+- [x] Profiles: public after trading unlock; companion, favourites, stats; never location
+- [x] Gatherings: ES events at public parks (seed script, `--now` for testing), GPS check-in validated server-side (boolean only stored), Supabase Realtime presence lobby (handles only), co-op rhythm → befriends everyone present; DEMO CHECK-IN
+- [x] `scripts/e2e-social.ts`
+- Deferred: "new wish on revisit (30%)" bonus
 
 ## H: Polish and deploy (branch `checkpoint-h`)
 - [ ] Loading states, sound pass, mobile pass, accessibility pass

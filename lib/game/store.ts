@@ -1,6 +1,7 @@
 "use client";
 import { create } from "zustand";
 import type { ConditionsView } from "@/lib/conditions/rules";
+import type { MeView } from "@/lib/social/types";
 
 /** A spirit the player can interact with (from the world layer). */
 export type SpiritRef = {
@@ -40,6 +41,9 @@ export type GameState = {
   conditions: ConditionsView | null;
   /** dev panel override, e.g. "fog.night" ("" = force clear); null = live */
   forcedCond: string | null;
+  /** player profile, stats, unlocks, companion (GET /api/profile/me) */
+  me: MeView | null;
+  townOpen: boolean;
   setJoystick: (x: number, y: number) => void;
 };
 
@@ -58,5 +62,7 @@ export const useGame = create<GameState>((set) => ({
   toast: null,
   conditions: null,
   forcedCond: null,
+  me: null,
+  townOpen: false,
   setJoystick: (x, y) => set({ joystick: { x, y } }),
 }));

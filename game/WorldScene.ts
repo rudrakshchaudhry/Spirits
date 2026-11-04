@@ -14,6 +14,7 @@ import { type Hood, hoodAt, taglineFor } from "@/lib/world/neighborhoods";
 import { TERRAIN_COLORS, TERRAIN_COUNT, T, terrainOf } from "@/lib/world/terrain";
 import { WANDERER_FRAME, drawTileset, drawWanderer } from "./art";
 import { Atmosphere } from "./atmosphere";
+import { COMPANION_PX, drawCompanion } from "./companionArt";
 import { markerTexture, treeSizeFor, treeTexture } from "./entityArt";
 import { spiritTexture } from "./spiritArt";
 
@@ -78,6 +79,12 @@ export class WorldScene extends Phaser.Scene {
   private lastChunkKey = "";
   private lastExploreFlush = 0;
   private atmosphere!: Atmosphere;
+  /** starter companion (spec §13.2): follows, reacts to nearby spirits, says things */
+  private companion: Phaser.GameObjects.Sprite | null = null;
+  private companionBang!: Phaser.GameObjects.Text;
+  private companionKey = "";
+  private trail: { x: number; y: number }[] = [];
+  private nextCompanionLine = 0;
   private condSig = "";
 
   constructor() {
@@ -110,11 +117,16 @@ export class WorldScene extends Phaser.Scene {
     const meet = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const st = useGame.getState();
-      if (!st.encounter && !st.atlasOpen && st.nearby) useGame.setState({ encounter: st.nearby });
+      if (!st.encounter && !st.atlasOpen && !st.townOpen && st.nearby) useGame.setState({ encounter: st.nearby });
     };
     kb.on("keydown-E", meet);
     kb.on("keydown-SPACE", meet);
     kb.on("keydown-ENTER", meet);
+    kb.on("keydown-T", (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const st = useGame.getState();
+      if (!st.encounter && !st.atlasOpen) useGame.setState({ townOpen: !st.townOpen });
+    });
     kb.on("keydown-B", (e: KeyboardEvent) => {
       if (e.repeat) return;
       const st = useGame.getState();
@@ -139,6 +151,11 @@ export class WorldScene extends Phaser.Scene {
       if (st.conditions !== prev.conditions || st.forcedCond !== prev.forcedCond) onCond();
     }));
     onCond();
+    this.companionBang = this.add.text(0, 0, "!", { fontFamily: "monospace", fontSize: "10px", color: "#ffe9a8", stroke: "#1e293b", strokeThickness: 3 })
+      .setOrigin(0.5, 1).setDepth(1e6).setVisible(false);
+    const onMe = () => this.syncCompanion();
+    this.unsub.push(useGame.subscribe((st, prev) => { if (st.me !== prev.me) onMe(); }));
+    onMe();
     // glints this player already picked up this window
     api<InventoryResponse>("/api/inventory").then(
       (r) => {
@@ -296,7 +313,7 @@ export class WorldScene extends Phaser.Scene {
     const dt = Math.min(deltaMs, 50) / 1000;
     const k = this.keys;
     const st = useGame.getState();
-    const busy = !!st.encounter || st.atlasOpen;
+    const busy = !!st.encounter || st.atlasOpen || st.townOpen;
     if (busy) {
       this.player.anims.stop();
       this.player.setFrame(`${this.facing}-0`);
@@ -341,6 +358,7 @@ export class WorldScene extends Phaser.Scene {
       if (windowIndex() !== this.glintWindow) this.refreshGlints();
     }
     this.atmosphere.update(this.pos, dt);
+    this.updateCompanion(time, dt);
     if (time - this.lastHoodCheck > 250) {
       this.lastHoodCheck = time;
       this.checkNeighborhood();
@@ -553,6 +571,73 @@ export class WorldScene extends Phaser.Scene {
         })
         .finally(() => this.pickupPending.delete(id));
     }
+  }
+
+  /** (Re)build the companion sprite when species / form / traits change. */
+  private syncCompanion() {
+    const c = useGame.getState().me?.companion;
+    if (!c) {
+      this.companion?.destroy();
+      this.companion = null;
+      this.companionKey = "";
+      return;
+    }
+    const key = `comp:${c.species}:${c.form}:${c.traits.join("+")}`;
+    if (key === this.companionKey) return;
+    this.companionKey = key;
+    if (!this.textures.exists(key)) {
+      const tex = this.textures.createCanvas(key, COMPANION_PX * 2, COMPANION_PX)!;
+      const ctx = tex.getContext();
+      for (let f = 0; f < 2; f++) {
+        ctx.save();
+        ctx.translate(f * COMPANION_PX, 0);
+        drawCompanion(ctx, c.species, c.form, c.traits, f);
+        ctx.restore();
+        tex.add(f, 0, f * COMPANION_PX, 0, COMPANION_PX, COMPANION_PX);
+      }
+      tex.refresh();
+      this.anims.create({ key: `${key}:bob`, frames: [0, 1].map((frame) => ({ key, frame })), frameRate: 3, repeat: -1 });
+    }
+    const x = this.companion?.x ?? this.player.x - 14, y = this.companion?.y ?? this.player.y;
+    this.companion?.destroy();
+    this.companion = this.add.sprite(x, y, key, 0).setOrigin(0.5, 1);
+    this.companion.play(`${key}:bob`);
+  }
+
+  /** Trail the player ~1.5 tiles behind; "!" when a spirit is in reach; the odd line. */
+  private updateCompanion(time: number, dt: number) {
+    if (!this.companion) return;
+    this.trail.push({ x: this.pos.x, y: this.pos.y });
+    if (this.trail.length > 18) this.trail.shift();
+    const target = this.trail[0];
+    const tx = target.x * TILE_PX - 10, ty = target.y * TILE_PX + 2;
+    const k = Math.min(1, dt * 6);
+    this.companion.x += (tx - this.companion.x) * k;
+    this.companion.y += (ty - this.companion.y) * k;
+    this.companion.setDepth(this.companion.y);
+    const st = useGame.getState();
+    const near = !!st.nearby && !st.encounter;
+    this.companionBang.setVisible(near).setPosition(this.companion.x, this.companion.y - COMPANION_PX + 2 - (near ? Math.abs(Math.sin(time / 150)) * 3 : 0));
+    if (time > this.nextCompanionLine && !st.encounter && !st.atlasOpen && !st.townOpen) {
+      this.nextCompanionLine = time + 90_000 + Math.random() * 60_000;
+      if (this.nextCompanionLine > 0 && time > 20_000) this.companionLine(st);
+    }
+  }
+
+  /** Short templated companion lines (spec §13.2) — warm, place-aware, never factual claims. */
+  private companionLine(st: ReturnType<typeof useGame.getState>) {
+    const name = { mote: "Mote", sprig: "Sprig", tidepip: "Tidepip" }[st.me?.companion?.species ?? ""] ?? "Your companion";
+    const c = st.conditions;
+    const lines = [
+      st.nearby && `${name} tugs your sleeve — a spirit is close by!`,
+      st.neighborhood && `${name} hums happily: “${st.neighborhood} feels different today.”`,
+      c?.fog && `${name} breathes in the fog. “Fog spirits love days like this.”`,
+      c?.rain && `${name} splashes in a puddle. “Rain spirits come out now, you know.”`,
+      c?.phase === "night" && `${name} glows a little brighter in the dark.`,
+      st.me?.nextGoal && `${name} wonders: “${st.me.nextGoal}?”`,
+      `${name} spots a glint on the ground somewhere nearby…`,
+    ].filter(Boolean) as string[];
+    useGame.setState({ toast: { text: lines[Math.floor(Math.random() * lines.length)], at: Date.now() } });
   }
 
   /** Conditions changed: rebuild every loaded chunk's entities, spirits and glints. */

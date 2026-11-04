@@ -3,6 +3,8 @@ import dynamic from "next/dynamic";
 import Atlas from "@/components/atlas/Atlas";
 import DevPanel from "@/components/hud/DevPanel";
 import WorldConditions from "@/components/hud/WorldConditions";
+import MeSync from "@/components/social/MeSync";
+import TownPanel from "@/components/social/TownPanel";
 import EncounterDialog from "@/components/encounter/EncounterDialog";
 import InteractPrompt from "@/components/hud/InteractPrompt";
 import Joystick from "@/components/hud/Joystick";
@@ -24,6 +26,8 @@ export default function Game() {
       <Joystick />
       <InteractPrompt />
       <Atlas />
+      <TownPanel />
+      <MeSync />
       <DevPanel />
       <EncounterDialog />
     </main>

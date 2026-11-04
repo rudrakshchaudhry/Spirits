@@ -94,6 +94,8 @@ export const MAPPINGS: Record<string, estypes.MappingTypeMapping> = {
     dynamic: false,
     properties: {
       kind: { type: "keyword" },
+      name: { type: "text" },
+      neighborhood: { type: "keyword" },
       starts_at: { type: "date" },
       ends_at: { type: "date" },
       location: { type: "geo_point" },
