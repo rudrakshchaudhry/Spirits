@@ -1,0 +1,103 @@
+import type { estypes } from "@elastic/elasticsearch";
+
+/** Index mappings (spec §6.1). */
+export const MAPPINGS: Record<string, estypes.MappingTypeMapping> = {
+  places: {
+    dynamic: false,
+    properties: {
+      id: { type: "keyword" },
+      kind: { type: "keyword" }, // tree|park|art|landmark|film|business
+      source_id: { type: "keyword" },
+      name: { type: "text", fields: { keyword: { type: "keyword", ignore_above: 256 } } },
+      description: { type: "text" },
+      location: { type: "geo_point" },
+      // City polygons are occasionally self-intersecting; keep the doc, drop the shape.
+      shape: { type: "geo_shape", ignore_malformed: true },
+      neighborhood: { type: "keyword" },
+      attrs: {
+        properties: {
+          species: { type: "text", fields: { keyword: { type: "keyword", ignore_above: 256 } } },
+          species_key: { type: "keyword" },
+          species_group: { type: "keyword" },
+          dbh: { type: "float" },
+          plant_date: { type: "date" },
+          legal_status: { type: "keyword" },
+          artist: { type: "text" },
+          year: { type: "integer" },
+          medium: { type: "text" },
+          film_title: { type: "text", fields: { keyword: { type: "keyword", ignore_above: 256 } } },
+          film_year: { type: "integer" },
+          director: { type: "text" },
+          business_category: { type: "keyword" },
+          naics: { type: "keyword" },
+          opened_at: { type: "date" },
+          acres: { type: "float" },
+          style: { type: "keyword" },
+        },
+      },
+      tags: { type: "keyword" },
+      keepsake_types: { type: "keyword" },
+      rank: { type: "float" }, // 0..1 "how notable" — drives tree rarity
+      embedding: { type: "dense_vector", dims: 1024, similarity: "cosine", index: true },
+      updated_at: { type: "date" },
+    },
+  },
+  spirits: {
+    dynamic: false,
+    properties: {
+      spirit_id: { type: "keyword" },
+      place_id: { type: "keyword" },
+      kind: { type: "keyword" },
+      place_name: { type: "text", fields: { keyword: { type: "keyword", ignore_above: 256 } } },
+      neighborhood: { type: "keyword" },
+      status: { type: "keyword" },
+      family: { type: "keyword" },
+      species_key: { type: "keyword" },
+      rarity: { type: "keyword" },
+      temperament: { type: "keyword" },
+      name: { type: "text", fields: { keyword: { type: "keyword" } } },
+      persona: { type: "text" },
+      voice_notes: { type: "text" },
+      wish: {
+        properties: {
+          keepsake_type: { type: "keyword" },
+          theme: { type: "text" },
+          riddle_1: { type: "text" },
+          riddle_2: { type: "text" },
+          target_place_ids: { type: "keyword" },
+          target_hoods: { type: "keyword" },
+        },
+      },
+      lore: { type: "object", enabled: false },
+      minigame_content: { type: "object", enabled: false },
+      sprite_seed: { type: "long" },
+      generated_at: { type: "date" },
+      model: { type: "keyword" },
+      moderation: { type: "object", enabled: false },
+    },
+  },
+  neighborhoods: {
+    dynamic: false,
+    properties: {
+      name: { type: "keyword" },
+      shape: { type: "geo_shape", ignore_malformed: true },
+      haze_score: { type: "float" },
+      open_311_count: { type: "integer" },
+      area_km2: { type: "float" },
+      exclusive_keepsakes: { type: "keyword" },
+      exclusive_species: { type: "keyword" },
+    },
+  },
+  events: {
+    dynamic: false,
+    properties: {
+      kind: { type: "keyword" },
+      starts_at: { type: "date" },
+      ends_at: { type: "date" },
+      location: { type: "geo_point" },
+      place_id: { type: "keyword" },
+      spirit_id: { type: "keyword" },
+      min_players: { type: "integer" },
+    },
+  },
+};

@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-pixel: var(--font-pixelify);
+}
+
+html,
+body {
+  background: #2e5c8a;
+  color: #f1f5f9;
+  overscroll-behavior: none;
+}
+
+canvas {
+  image-rendering: pixelated;
+}
