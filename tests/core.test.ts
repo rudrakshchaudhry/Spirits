@@ -187,3 +187,16 @@ describe("exploration anti-cheat", () => {
     expect(r3.deferred).toEqual(["32_33"]);
   });
 });
+
+describe("guest signup limit", () => {
+  it("is strict in production, lenient on dev builds, configurable, and never stores raw IPs", async () => {
+    const { guestLimit, hashIp, clientIp } = await import("@/lib/social/guestLimit");
+    expect(guestLimit({} as NodeJS.ProcessEnv)).toBe(10);
+    expect(guestLimit({ ALLOW_DEV_CONDITIONS: "1" } as unknown as NodeJS.ProcessEnv)).toBe(100);
+    expect(guestLimit({ GUEST_LIMIT_PER_HOUR: "3" } as unknown as NodeJS.ProcessEnv)).toBe(3);
+    const h = hashIp("203.0.113.7", "salt");
+    expect(h).not.toContain("203");
+    expect(h).toBe(hashIp("203.0.113.7", "salt"));
+    expect(clientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
+  });
+});

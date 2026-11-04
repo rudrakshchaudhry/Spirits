@@ -62,3 +62,4 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 ## Self-improvement log
 - improve/explore-cap: /api/explore accepted 50 arbitrary chunk keys per call (incl. ocean), so one request could unlock the crew board, evolve the companion and farm crew scores. Now land-only, 10/request, 40 new chunks per 5 min; client re-queues deferred keys. +1 test.
 - improve/single-use-play: encounter tokens were replayable for 15 min, so after a failed game a player could resend the token with a perfect score and befriend the spirit despite the cooldown. /play now rejects a token once a play has been recorded after it was issued (live-checked: replay → 409).
+- improve/guest-rate-limit: /api/guest let anyone mint unlimited Supabase auth users. Now max 10 per IP per hour (100 on dev builds, GUEST_LIMIT_PER_HOUR overrides), tracked in guest_signups with a salted IP hash only. +1 test; live-checked 429.
