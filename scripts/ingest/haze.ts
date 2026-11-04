@@ -28,10 +28,11 @@ export async function computeHaze() {
     group: "analysis_neighborhood",
   })) for (const r of page) if (r.analysis_neighborhood) closed[r.analysis_neighborhood] = Number(r.count);
 
-  const hoods = await es().search<{ name: string; area_km2: number; haze_score?: number }>({
-    index: INDEX.neighborhoods, size: 100, _source: ["name", "area_km2", "haze_score"],
+  const hoods = await es().search<{ name: string; area_km2: number; haze_score?: number; haze_density?: number; haze_prev_at?: string }>({
+    index: INDEX.neighborhoods, size: 100, _source: ["name", "area_km2", "haze_score", "haze_density", "haze_prev_at"],
   });
-  const rows = hoods.hits.hits.map((h) => h._source!);
+  const rows = hoods.hits.hits.map((h) => ({ ...h._source!, _id: h._id! }));
+  if (!rows.length) throw new Error("neighborhoods index is empty — run `npm run ingest -- neighborhoods` first");
   // density, softened by recent progress
   const density = rows.map((r) => {
     const o = open[r.name] ?? 0;
@@ -40,18 +41,28 @@ export async function computeHaze() {
   });
   const sorted = [...density].sort((a, b) => a - b);
   const p10 = sorted[Math.floor(sorted.length * 0.1)], p90 = sorted[Math.floor(sorted.length * 0.9)];
-  const ops = rows.flatMap((r, i) => [
-    { update: { _index: INDEX.neighborhoods, _id: r.name } },
+  const DAY = 86_400_000;
+  const ops = rows.flatMap((r, i) => {
+    // roll the comparison snapshot at most once a day, so "lifting" compares against ≥24 h ago
+    const roll = !r.haze_prev_at || Date.now() - Date.parse(r.haze_prev_at) >= DAY;
+    return [
+    { update: { _index: INDEX.neighborhoods, _id: r._id } },
     {
       doc: {
-        haze_prev: r.haze_score ?? null,
+        haze_density: Math.round(density[i] * 100) / 100,
+        ...(roll ? { haze_density_prev: r.haze_density ?? null, haze_prev: r.haze_score ?? null, haze_prev_at: new Date().toISOString() } : {}),
         haze_score: Math.round(Math.max(0, Math.min(1, (density[i] - p10) / Math.max(1e-6, p90 - p10))) * 100) / 100,
         open_311_count: open[r.name] ?? 0,
         haze_updated_at: new Date().toISOString(),
       },
     },
-  ]);
-  await es().bulk({ operations: ops, refresh: true });
+  ];
+  });
+  const res = await es().bulk({ operations: ops, refresh: true });
+  if (res.errors) {
+    const bad = res.items.filter((it) => it.update?.error);
+    throw new Error(`haze: ${bad.length} neighbourhood updates failed, e.g. ${JSON.stringify(bad[0]?.update?.error).slice(0, 200)}`);
+  }
   return rows.length;
 }
 

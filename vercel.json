@@ -3,6 +3,7 @@
   "crons": [
     { "path": "/api/cron/refresh-311", "schedule": "0 * * * *" },
     { "path": "/api/cron/new-business", "schedule": "30 13 * * *" },
+    { "path": "/api/cron/featured", "schedule": "5 13 * * *" },
     { "path": "/api/cron/featured", "schedule": "5 14 * * *" }
   ]
 }

@@ -63,6 +63,6 @@ export type ConditionsView = Conditions & {
   tags: ConditionTag[];
   key: string;
   devAllowed: boolean;
-  haze: Record<string, { score: number; prev: number | null }>;
+  haze: Record<string, { score: number; prev: number | null; lifting: boolean }>;
   featured: { family: string; rarity: string; neighborhood: string; date: string } | null;
 };

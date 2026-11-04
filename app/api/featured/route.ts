@@ -8,7 +8,7 @@ import { featuredDay, featuredFor } from "@/lib/world/featured";
  * honoured only when dev conditions are allowed on this server.
  */
 export async function GET(req: Request) {
-  const f = await featuredFor(featuredDay());
+  const f = await featuredFor(featuredDay()).catch(() => null);
   if (!f) return NextResponse.json({ featured: null });
   const reveal = new URL(req.url).searchParams.get("reveal") === "1" && devConditionsAllowed();
   return NextResponse.json({

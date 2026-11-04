@@ -10,7 +10,7 @@ const MAP_W = 3520, MAP_H = 3529; // world tiles (matches public/minimap.png ext
  * exact position of anything undiscovered.
  */
 export default function AtlasMap({ explored, glow, featured, haze }: {
-  explored: Record<string, number>; glow: string[]; featured?: string | null; haze?: Record<string, { score: number; prev: number | null }>;
+  explored: Record<string, number>; glow: string[]; featured?: string | null; haze?: Record<string, { score: number; prev: number | null; lifting?: boolean }>;
 }) {
   const [hoods, setHoods] = useState<Hood[] | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export default function AtlasMap({ explored, glow, featured, haze }: {
                   className={glowSet.has(h.name) || featured === h.name ? "animate-pulse motion-reduce:animate-none" : ""}
                   onMouseEnter={() => {
                     const hz = haze?.[h.name];
-                    const lifting = hz && hz.prev !== null && hz.score < hz.prev - 0.05;
+                    const lifting = !!hz?.lifting;
                     setHover(
                       `${h.name} · ${pct}% explored` +
                         (glowSet.has(h.name) ? " · a wish glows here" : "") +

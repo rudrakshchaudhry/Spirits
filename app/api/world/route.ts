@@ -24,8 +24,10 @@ export async function GET(req: NextRequest) {
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : sfDate();
   try {
     // Glints change every 2-hour window: the client puts `w` in the URL so caches key on it.
+    // integer windows only, and only ones /api/pickup accepts (now, or the grace window now-1)
     const w = Number(sp.get("w"));
-    const win = Number.isFinite(w) && Math.abs(w - windowIndex()) <= 1 ? w : windowIndex();
+    const now = windowIndex();
+    const win = Number.isInteger(w) && (w === now || w === now - 1) ? w : now;
     // Live conditions (or the dev panel's forced ones, when the server allows it).
     const { tags, cond } = await tagsFor(sp.get("cond"));
     const ck = condKey(tags);
@@ -37,8 +39,12 @@ export async function GET(req: NextRequest) {
       }),
     );
     const body: WorldResponse = { date, window: win, cond: ck, chunks };
+    // Only cache publicly when the URL's condition key matches what we actually served;
+    // otherwise a CDN would store a night/fog world under a clear-weather URL.
+    const urlKey = sp.get("cond") ?? sp.get("ck");
+    const cacheable = urlKey !== null && urlKey === ck && sp.get("w") !== null;
     return NextResponse.json(body, {
-      headers: { "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" },
+      headers: { "Cache-Control": cacheable ? "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" : "no-store" },
     });
   } catch (e) {
     console.error("world query failed", e);
