@@ -181,6 +181,9 @@ describe("exploration anti-cheat", () => {
     const many = Array.from({ length: 30 }, (_, i) => `${20 + (i % 10)}_${30 + Math.floor(i / 10)}`);
     expect(admitChunks(many, new Set(), 0).fresh.length).toBeLessThanOrEqual(EXPLORE_LIMITS.perRequest);
     // budget exhausted → new chunks deferred, revisits still fine
+    const over = admitChunks(many, new Set(), 0);
+    expect(over.fresh.length + over.deferred.length).toBe(new Set(many).size - many.filter((k) => !/^\d+_\d+$/.test(k)).length - (many.length - over.fresh.length - over.deferred.length));
+    expect(over.deferred.length).toBeGreaterThan(0); // overflow comes back as deferred, not dropped
     const r3 = admitChunks(["32_32", "32_33"], new Set(["32_32"]), EXPLORE_LIMITS.newPerWindow);
     expect(r3.revisits).toEqual(["32_32"]);
     expect(r3.fresh).toEqual([]);
@@ -189,14 +192,22 @@ describe("exploration anti-cheat", () => {
 });
 
 describe("guest signup limit", () => {
-  it("is strict in production, lenient on dev builds, configurable, and never stores raw IPs", async () => {
-    const { guestLimit, hashIp, clientIp } = await import("@/lib/social/guestLimit");
-    expect(guestLimit({} as NodeJS.ProcessEnv)).toBe(10);
+  it("is generous for shared wifi, lenient on dev builds, configurable", async () => {
+    const { guestLimit } = await import("@/lib/social/guestLimit");
+    expect(guestLimit({} as NodeJS.ProcessEnv)).toBe(30);
     expect(guestLimit({ ALLOW_DEV_CONDITIONS: "1" } as unknown as NodeJS.ProcessEnv)).toBe(100);
     expect(guestLimit({ GUEST_LIMIT_PER_HOUR: "3" } as unknown as NodeJS.ProcessEnv)).toBe(3);
-    const h = hashIp("203.0.113.7", "salt");
-    expect(h).not.toContain("203");
-    expect(h).toBe(hashIp("203.0.113.7", "salt"));
-    expect(clientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toBe("203.0.113.7");
+  });
+  it("keys IPv6 by /64, never stores raw IPs, needs a server salt", async () => {
+    const { clientKey, hashIp, ipSalt } = await import("@/lib/social/guestLimit");
+    expect(clientKey(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }))).toEqual({ key: "203.0.113.7", known: true });
+    const a = clientKey(new Headers({ "x-real-ip": "2001:db8:1:2:aaaa::1" })).key;
+    const b = clientKey(new Headers({ "x-real-ip": "2001:0db8:0001:0002:ffff:1:2:3" })).key;
+    expect(a).toBe("2001:db8:1:2::/64");
+    expect(b).toBe(a);
+    expect(clientKey(new Headers())).toEqual({ key: "unknown", known: false });
+    expect(hashIp("203.0.113.7", "s")).not.toContain("203");
+    expect(ipSalt({} as NodeJS.ProcessEnv)).toBeNull();
+    expect(ipSalt({ SUPABASE_SERVICE_ROLE_KEY: "k" } as unknown as NodeJS.ProcessEnv)).toBe("k");
   });
 });

@@ -30,7 +30,7 @@ async function signInGuest(): Promise<string> {
     if (r.data.session) return r.data.session.access_token;
   }
   const res = await fetch("/api/guest", { method: "POST" });
-  if (!res.ok) throw new Error("couldn't create a guest account");
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "couldn't create a guest account");
   creds = await res.json();
   try {
     localStorage.setItem(GUEST_KEY, JSON.stringify(creds));

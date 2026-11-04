@@ -27,11 +27,19 @@ export async function POST(req: Request) {
   const { data: friend } = await sb.from("friendships").select("*").eq("player_id", player.id).eq("spirit_id", claims.s).maybeSingle();
   if (!friend) return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
   if (friend.status !== "met") return NextResponse.json({ trust: friend.trust, befriended: true, already: true });
-  // Single-use tokens: /start stamps last_visit_at just before signing (≤ t0) and every
-  // play/gift moves it forward, so a replayed token (e.g. to retry past the cooldown) is stale.
-  if (Date.parse(friend.last_visit_at) > claims.t0) {
-    return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
-  }
+  // A spirit that wandered off can't be played again until it returns (no retry via a second token).
+  const { data: cd } = await sb.from("encounter_cooldowns").select("until").eq("player_id", player.id).eq("spirit_id", claims.s).maybeSingle();
+  if (cd && Date.parse(cd.until) > Date.now()) return NextResponse.json({ error: "the spirit has wandered off for now" }, { status: 409 });
+  // Single-use tokens: atomically claim this token's issue time; replays and older tokens lose.
+  // (Overlapping /start calls don't invalidate each other — only a recorded play does.)
+  const { data: claimed } = await sb
+    .from("friendships")
+    .update({ last_play_t0: claims.t0 })
+    .eq("player_id", player.id)
+    .eq("spirit_id", claims.s)
+    .or(`last_play_t0.is.null,last_play_t0.lt.${Math.floor(claims.t0)}`)
+    .select("spirit_id");
+  if (!claimed?.length) return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
 
   const gained = Math.round(score * 60);
   const trust = Math.min(200, claims.trust0 + gained);
