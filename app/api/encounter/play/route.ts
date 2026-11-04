@@ -27,6 +27,11 @@ export async function POST(req: Request) {
   const { data: friend } = await sb.from("friendships").select("*").eq("player_id", player.id).eq("spirit_id", claims.s).maybeSingle();
   if (!friend) return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
   if (friend.status !== "met") return NextResponse.json({ trust: friend.trust, befriended: true, already: true });
+  // Single-use tokens: /start stamps last_visit_at just before signing (≤ t0) and every
+  // play/gift moves it forward, so a replayed token (e.g. to retry past the cooldown) is stale.
+  if (Date.parse(friend.last_visit_at) > claims.t0) {
+    return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
+  }
 
   const gained = Math.round(score * 60);
   const trust = Math.min(200, claims.trust0 + gained);
