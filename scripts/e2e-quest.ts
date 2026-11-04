@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- loose JSON in a dev-only e2e script */
 /**
  * API end-to-end check of Checkpoint D against a running dev server:
  * guest → meet the quest spirit → play → pick up a sea shell at Ocean Beach →
