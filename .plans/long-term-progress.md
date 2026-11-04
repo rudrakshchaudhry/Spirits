@@ -47,7 +47,7 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - [x] Profiles: public after trading unlock; companion, favourites, stats; never location
 - [x] Gatherings: ES events at public parks (seed script, `--now` for testing), GPS check-in validated server-side (boolean only stored), Supabase Realtime presence lobby (handles only), co-op rhythm → befriends everyone present; DEMO CHECK-IN
 - [x] `scripts/e2e-social.ts`
-- Deferred: "new wish on revisit (30%)" bonus
+- [x] "new wish on revisit (30%)" — done in improve/revisit-wishes
 
 ## H: Polish and deploy (branch `checkpoint-h`)
 - [x] Unit tests (vitest, 21): projection, spawning, glints, conditions, tokens, games, catalog, social rules, trades, check-in distance
@@ -64,3 +64,4 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - improve/single-use-play: encounter tokens were replayable for 15 min, so after a failed game a player could resend the token with a perfect score and befriend the spirit despite the cooldown. /play now rejects a token once a play has been recorded after it was issued (live-checked: replay → 409).
 - improve/guest-rate-limit: /api/guest let anyone mint unlimited Supabase auth users. Now max 10 per IP per hour (100 on dev builds, GUEST_LIMIT_PER_HOUR overrides), tracked in guest_signups with a salted IP hash only. +1 test; live-checked 429.
 - improve/review-fixes (draft, needs migration 20261104000005): fixes from a high-effort review of the improve/* commits — explore resend loop + dropped overflow, atomic guest claim (advisory lock), fail-closed limiter, IPv6 /64 keys, separate unknown-IP bucket, 30/h default + client shows the 429 message, server-only IP salt, rate-limit row pruning, false 409 on overlapping /start (last_play_t0 + active-cooldown check).
+- improve/revisit-wishes: spec §8.4 done — revisits after 24 h (any visit on dev/demo builds) unlock the next chapter; once the first wish is granted, ~30% of revisits roll a per-player bonus wish (Mistral riddles w/ guardrails, ES-linked glow); granting it adds an Atlas star + companion XP. Migration 20261104000006 (add-only). +1 test; live-checked end to end.

@@ -145,7 +145,7 @@ export default function EncounterDialog() {
       setGift(g);
       setGiftOpen(false);
       if (g.outcome === "declined" || !data) return;
-      sfx(g.outcome === "wish" ? "wish" : "befriend");
+      sfx(g.outcome === "wish" || g.outcome === "bonus" ? "wish" : "befriend");
       setShownTrust(g.trust);
       if (g.befriended) {
         useGame.setState((s) => ({ friends: { ...s.friends, [data.spirit.id]: true } }));
@@ -291,6 +291,16 @@ export default function EncounterDialog() {
           {phase === "friend" && data?.mode === "friend" && (
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-wide text-rose-200">♥ friend · lore {data.lore.length}/3</p>
+              {data.bonusWish && (
+                <div className="rounded-md border border-amber-200/20 bg-amber-100/5 px-3 py-2 text-sm italic text-amber-100">
+                  <span className="mr-1 not-italic">✦</span>
+                  {data.bonusWish.isNew && <span className="mr-1 not-italic text-amber-300">A new wish!</span>}
+                  {data.bonusWish.riddle}
+                </div>
+              )}
+              {data.nextChapterIn !== null && data.nextChapterIn > 0 && (
+                <p className="text-xs text-slate-400">Come back in about {Math.ceil(data.nextChapterIn / 3600_000)} h for the next chapter.</p>
+              )}
               {data.lore.map((l, i) => (
                 <p key={i} className="rounded-md bg-white/5 px-3 py-2 text-sm text-slate-200">
                   {l}
@@ -303,7 +313,7 @@ export default function EncounterDialog() {
           {(phase === "result" || phase === "friend") && data && data.mode !== "wandering" && (
             <div className="space-y-2">
               {gift && (
-                <div className={`rounded-md px-3 py-2 text-sm ${gift.outcome === "wish" ? "bg-fuchsia-500/15 text-fuchsia-100" : gift.outcome === "theme" ? "bg-amber-500/10 text-amber-100" : "bg-white/5 text-slate-300"}`}>
+                <div className={`rounded-md px-3 py-2 text-sm ${gift.outcome === "wish" || gift.outcome === "bonus" ? "bg-fuchsia-500/15 text-fuchsia-100" : gift.outcome === "theme" ? "bg-amber-500/10 text-amber-100" : "bg-white/5 text-slate-300"}`}>
                   <p>{gift.line}</p>
                   {gift.outcome !== "declined" && <p className="mt-1 text-xs opacity-80">Trust {Math.min(100, gift.trust)} / 100{gift.rare ? " · rare friendship ✦" : gift.befriended ? " · friends ♥" : ""}</p>}
                   {gift.secret && <p className="mt-2 border-t border-white/10 pt-2 italic">✦ {gift.secret}</p>}
@@ -315,7 +325,8 @@ export default function EncounterDialog() {
                 (() => {
                   const canGift =
                     (phase === "result" && !result?.befriended && !(gift && gift.outcome !== "declined" && gift.befriended)) ||
-                    (phase === "friend" && data.mode === "friend" && !data.wishGranted && gift?.outcome !== "wish");
+                    (phase === "friend" && data.mode === "friend" &&
+                      ((!data.wishGranted && gift?.outcome !== "wish") || (!!data.bonusWish && gift?.outcome !== "bonus")));
                   return canGift ? (
                     <button type="button" onClick={() => setGiftOpen(true)} className="rounded-md border border-amber-200/30 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-100/10">
                       Offer a keepsake…

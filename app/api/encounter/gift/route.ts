@@ -27,8 +27,27 @@ export async function POST(req: Request) {
   if (!friend || !card) return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
 
   const wished = type === card.wish.keepsake_type && !friend.wish_fulfilled_at;
-  const sameTheme = !wished && keepsake(type).theme === keepsake(card.wish.keepsake_type).theme;
   const k = keepsake(type);
+
+  // A revisit wish (spec §8.4): granting it is a bonus star + companion XP, no trust needed.
+  const bonus = friend.bonus_wish as { keepsake_type: string; theme: string } | null;
+  if (!wished && bonus && type === bonus.keepsake_type) {
+    const { data: consumed, error } = await sb.rpc("consume_keepsake", { p_player: player.id, p_type: type });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!consumed) return NextResponse.json({ error: `you don't have a ${k.label}` }, { status: 400 });
+    await sb
+      .from("friendships")
+      .update({ bonus_wish: null, bonus_wishes_granted: (friend.bonus_wishes_granted ?? 0) + 1, last_visit_at: new Date().toISOString() })
+      .eq("player_id", player.id)
+      .eq("spirit_id", claims.s);
+    return NextResponse.json({
+      outcome: "bonus",
+      trust: friend.trust,
+      befriended: true,
+      line: `${card.name} lights up. "A ${k.label}! You remembered my new wish." ✦ A new star shines in your Atlas.`,
+    });
+  }
+  const sameTheme = !wished && keepsake(type).theme === keepsake(card.wish.keepsake_type).theme;
 
   if (!wished && !sameTheme) {
     return NextResponse.json({
