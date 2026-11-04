@@ -10,7 +10,7 @@ export type EncounterClaims = {
   p: string; // place id
   t0: number; // started at (ms)
   trust0: number;
-  game: "rhythm" | "trivia";
+  game: "rhythm" | "trivia" | "rush" | "thennow" | "mosaic";
   /** minimum plausible game duration (ms) */
   minMs: number;
   exp: number;

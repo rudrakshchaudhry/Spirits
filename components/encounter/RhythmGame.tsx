@@ -108,6 +108,8 @@ export default function RhythmGame({ game, onDone }: { game: RhythmContent; onDo
     c.addEventListener("pointerdown", onPointer);
 
     const W = c.width, H = c.height;
+    // Reduced motion: nothing scrolls — a ring fills in place and you tap when it's full.
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const tick = () => {
       const now = performance.now() - start;
       // expire missed notes
@@ -130,9 +132,25 @@ export default function RhythmGame({ game, onDone }: { game: RhythmContent; onDo
       ctx.fillRect(HIT_X - 2, H / 2 - 26, 4, 52);
       ctx.strokeStyle = "rgba(246,231,168,0.5)";
       ctx.strokeRect(HIT_X - 16, H / 2 - 16, 32, 32);
+      if (still) {
+        const next = notes.findIndex((_, i) => judged[i] === null);
+        const p = next < 0 ? 0 : Math.max(0, Math.min(1, 1 - (notes[next] - now) / lead));
+        ctx.strokeStyle = "#f6e7a8";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(W / 2, H / 2, 34, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "#8fd16a";
+        ctx.beginPath();
+        ctx.arc(W / 2, H / 2, 32 * p, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#e2e8f0";
+        ctx.font = "12px monospace";
+        ctx.fillText("tap when full", W / 2 - 40, H - 10);
+      }
       // notes (leaves)
       const pxPerMs = (W - HIT_X) / lead;
-      notes.forEach((t, i) => {
+      if (!still) notes.forEach((t, i) => {
         const q = judged[i];
         if (q !== null && q > 0) return;
         const x = HIT_X + (t - now) * pxPerMs;

@@ -20,12 +20,13 @@ Git flow: one branch per checkpoint, stacked (`hackathon-build` → `checkpoint-
 - [x] `scripts/e2e-quest.ts` API end-to-end check
 - Not done: revisit "new wish" (30%) — deferred to G (needs companion XP)
 
-## E: Every family (branch `checkpoint-e`)
-- [ ] Shopkeeper "Rush Hour" memory game (items from the shop category)
-- [ ] Ancient "Then or Now" (clue from landmark fields; options = real nearby places from ES)
-- [ ] Art guardian "Mosaic" sliding-tile puzzle (palette from seed)
-- [ ] Park spirits: rhythm variant
-- [ ] Reduced-motion / colorblind-safe variants
+## E: Every family (branch `checkpoint-e`) ✅
+- [x] Shopkeeper "Rush Hour": generic per-category menus (no claims about the real shop's menu)
+- [x] Ancient "Then or Now": clues from landmark/art/shop/park fields; options = real places within 300 m (ES geo_distance)
+- [x] Art guardian "Mosaic": rotating-tile puzzle from the seed palette; reveals real title/artist/year
+- [x] Park spirits: "Birdsong" rhythm variant
+- [x] Reduced motion (rhythm ring mode), colour-blind safe (✓/✗ + text feedback, shape-based mosaic)
+- [x] Dev test hook `window.__game` (only with ?dev=1)
 
 ## F: Living world (branch `checkpoint-f`)
 - [ ] /api/conditions: Open-Meteo (fog/rain) + suncalc (night) + blossom season, cached 15 min
