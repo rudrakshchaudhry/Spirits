@@ -20,6 +20,8 @@ export default function GameCanvas() {
     let cancelled = false;
     const params = new URLSearchParams(window.location.search);
     useGame.setState({ devMode: params.get("dev") === "1" });
+    // dev-only test hook: lets scripts open a specific encounter (?dev=1)
+    if (params.get("dev") === "1") (window as unknown as { __game?: typeof useGame }).__game = useGame;
 
     (async () => {
       try {

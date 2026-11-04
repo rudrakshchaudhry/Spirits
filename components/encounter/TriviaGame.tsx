@@ -3,7 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TriviaGame as TriviaContent } from "@/lib/encounter/games";
 
 /** "Take Two" (spec §9.4): rapid film trivia built only from the film's dataset row. */
-export default function TriviaGame({ game, onDone }: { game: TriviaContent; onDone: (score: number, durationMs: number) => void }) {
+export default function TriviaGame({
+  game, onDone, footer = "Answers come straight from the city’s film-location records.",
+}: { game: Pick<TriviaContent, "seconds" | "questions">; onDone: (score: number, durationMs: number) => void; footer?: string }) {
   const [i, setI] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [left, setLeft] = useState(game.seconds);
@@ -71,11 +73,13 @@ export default function TriviaGame({ game, onDone }: { game: TriviaContent; onDo
             >
               <span className="mr-2 font-mono text-xs text-slate-400">{idx + 1}</span>
               {o}
+              {picked !== null && idx === q.answer && <span className="ml-1">✓</span>}
+              {picked !== null && idx === picked && idx !== q.answer && <span className="ml-1">✗</span>}
             </button>
           );
         })}
       </div>
-      <p className="text-xs text-slate-400">Answers come straight from the city’s film-location records.</p>
+      <p className="text-xs text-slate-400">{footer}</p>
     </div>
   );
 }

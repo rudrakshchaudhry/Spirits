@@ -6,7 +6,9 @@ import { useGame } from "@/lib/game/store";
 import type { GiftResponse, PlayResponse, StartResponse } from "@/lib/encounter/types";
 import { FAMILY_LABEL, RARITY_STYLE } from "@/lib/spirits/labels";
 import GiftPanel from "./GiftPanel";
+import MosaicGame from "./MosaicGame";
 import RhythmGame from "./RhythmGame";
+import RushGame from "./RushGame";
 import SpiritPortrait from "./SpiritPortrait";
 import TriviaGame from "./TriviaGame";
 
@@ -228,7 +230,23 @@ export default function EncounterDialog() {
           )}
 
           {phase === "play" && data?.mode === "meet" &&
-            (data.game.type === "rhythm" ? <RhythmGame game={data.game} onDone={finishGame} /> : <TriviaGame game={data.game} onDone={finishGame} />)}
+            (() => {
+              const g = data.game;
+              switch (g.type) {
+                case "rhythm": return <RhythmGame game={g} onDone={finishGame} />;
+                case "trivia": return <TriviaGame game={g} onDone={finishGame} />;
+                case "rush": return <RushGame game={g} onDone={finishGame} />;
+                case "mosaic": return <MosaicGame game={g} onDone={finishGame} />;
+                case "thennow":
+                  return (
+                    <TriviaGame
+                      game={{ seconds: g.seconds, questions: g.rounds.map((r) => ({ q: `Then: ${r.clue} What stands here now?`, options: r.options, answer: r.answer })) }}
+                      onDone={finishGame}
+                      footer="Clues come from SF Planning landmark records and the city's datasets; every answer is a real place within 300 m."
+                    />
+                  );
+              }
+            })()}
 
           {phase === "saving" && <p className="font-pixel animate-pulse text-slate-300 motion-reduce:animate-none">The spirit thinks it over…</p>}
 
