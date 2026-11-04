@@ -211,3 +211,21 @@ describe("guest signup limit", () => {
     expect(ipSalt({ SUPABASE_SERVICE_ROLE_KEY: "k" } as unknown as NodeJS.ProcessEnv)).toBe("k");
   });
 });
+
+describe("revisit wishes (spec §8.4)", () => {
+  it("counts a revisit after 24 h (or always on relaxed builds) and rolls ~30% deterministically", async () => {
+    const { revisitCounts, rollsNewWish, pickBonusKeepsake, NEW_WISH_CHANCE } = await import("@/lib/spirits/bonusWish");
+    const now = Date.parse("2026-11-04T12:00:00Z");
+    expect(revisitCounts(new Date(now - 3600_000).toISOString(), now)).toBe(false);
+    expect(revisitCounts(new Date(now - 25 * 3600_000).toISOString(), now)).toBe(true);
+    expect(revisitCounts(new Date(now - 3600_000).toISOString(), now, true)).toBe(true);
+    expect(rollsNewWish("p", "s", "2026-11-04")).toBe(rollsNewWish("p", "s", "2026-11-04"));
+    let hits = 0;
+    for (let i = 0; i < 2000; i++) if (rollsNewWish(`p${i}`, "s", "2026-11-04")) hits++;
+    expect(hits / 2000).toBeGreaterThan(NEW_WISH_CHANCE - 0.05);
+    expect(hits / 2000).toBeLessThan(NEW_WISH_CHANCE + 0.05);
+    const k = pickBonusKeepsake({ wish: { keepsake_type: "sea_shell" } } as never, { keepsake_types: ["crumb"] }, "seed");
+    expect(k).not.toBe("sea_shell");
+    expect(k).not.toBe("crumb");
+  });
+});

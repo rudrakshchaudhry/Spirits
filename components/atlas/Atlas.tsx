@@ -21,6 +21,8 @@ type Entry = {
   sprite_seed: number;
   lore: string[];
   wish: { theme: string; keepsake: string; riddles: string[]; glowHoods: string[]; granted: boolean } | null;
+  bonus?: { theme: string; riddles: string[]; glowHoods: string[] } | null;
+  stars?: number;
 };
 type AtlasData = {
   friends: Entry[];
@@ -103,12 +105,12 @@ export default function Atlas() {
                   onToggle={(id) => setExpanded((x) => (x === id ? null : id))}
                 />
               )}
-              {data && tab === "Wishes" && <Wishes entries={[...data.met, ...data.friends].filter((e) => e.wish?.riddles.length)} />}
+              {data && tab === "Wishes" && <Wishes entries={[...data.met, ...data.friends].filter((e) => e.wish?.riddles.length || e.bonus)} />}
               {data && tab === "Keepsakes" && <Keepsakes items={data.inventory} />}
               {data && tab === "Map" && (
                 <AtlasMap
                   explored={data.explored}
-                  glow={[...new Set([...data.met, ...data.friends].flatMap((e) => e.wish?.glowHoods ?? []))]}
+                  glow={[...new Set([...data.met, ...data.friends].flatMap((e) => [...(e.wish?.glowHoods ?? []), ...(e.bonus?.glowHoods ?? [])]))]}
                   featured={useGame.getState().conditions?.featured?.neighborhood ?? null}
                   haze={useGame.getState().conditions?.haze}
                 />
@@ -134,6 +136,7 @@ function List({ entries, empty, expanded, onToggle }: { entries: Entry[]; empty:
                 <span className="font-pixel text-lg leading-none">{e.spirit_name}</span>
                 <span className={`rounded px-1 text-[9px] font-semibold uppercase ${RARITY_STYLE[e.rarity]}`}>{e.rarity}</span>
                 {e.status === "rare" && <span className="text-[10px] text-fuchsia-200">✦ rare friend</span>}
+                {!!e.stars && <span className="text-[10px] text-amber-200">{"★".repeat(Math.min(5, e.stars))}</span>}
               </div>
               <p className="truncate text-xs text-slate-400">
                 {FAMILY_LABEL[e.family]} · {e.place_name}
@@ -166,17 +169,22 @@ function Wishes({ entries }: { entries: Entry[] }) {
       {entries.map((e) => (
         <li key={e.spirit_id} className="rounded-lg bg-white/5 p-3">
           <p className="font-pixel">
-            {e.spirit_name} <span className="text-xs text-slate-400">wishes for {e.wish!.theme}</span>
+            {e.spirit_name} <span className="text-xs text-slate-400">wishes for {e.wish?.theme}</span>
           </p>
-          {e.wish!.riddles.map((r, i) => (
+          {(e.wish?.riddles ?? []).map((r, i) => (
             <p key={i} className="mt-1 text-sm italic text-amber-100">
               ✦ {r}
             </p>
           ))}
-          {e.wish!.granted ? (
+          {e.bonus && (
+            <p className="mt-1 text-sm italic text-amber-100">
+              ✦ New wish ({e.bonus.theme}): {e.bonus.riddles.join(" … ")}
+            </p>
+          )}
+          {e.wish?.granted ? (
             <p className="mt-2 text-xs text-fuchsia-200">✦ Wish granted</p>
-          ) : e.wish!.glowHoods.length > 0 ? (
-            <p className="mt-2 text-xs text-emerald-200">Your Atlas glows toward: {e.wish!.glowHoods.join(", ")}</p>
+          ) : (e.wish?.glowHoods.length ?? 0) > 0 ? (
+            <p className="mt-2 text-xs text-emerald-200">Your Atlas glows toward: {e.wish?.glowHoods.join(", ")}</p>
           ) : (
             <p className="mt-2 text-xs text-slate-500">Hear its second riddle and the Atlas will glow toward where to look.</p>
           )}

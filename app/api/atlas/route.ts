@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
   const { data: rows, error } = await supabaseAdmin()
     .from("friendships")
-    .select("spirit_id,place_id,family,rarity,spirit_name,place_name,neighborhood,trust,status,riddles_heard,lore_unlocked,look,sprite_seed,befriended_at,met_at,wish_fulfilled_at")
+    .select("spirit_id,place_id,family,rarity,spirit_name,place_name,neighborhood,trust,status,riddles_heard,lore_unlocked,look,sprite_seed,befriended_at,met_at,wish_fulfilled_at,bonus_wish,bonus_wishes_granted")
     .eq("player_id", player.id)
     .order("befriended_at", { ascending: false, nullsFirst: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -41,6 +41,15 @@ export async function GET(req: Request) {
             granted: !!r.wish_fulfilled_at,
           }
         : null,
+      // a revisit wish is open: show its first riddle and glow toward where it can be found
+      bonus: r.bonus_wish
+        ? {
+            theme: r.bonus_wish.theme,
+            riddles: r.bonus_wish.riddles.slice(0, Math.max(1, r.bonus_wish.heard ?? 1)),
+            glowHoods: (r.bonus_wish.heard ?? 1) >= 2 ? r.bonus_wish.target_hoods ?? [] : [],
+          }
+        : null,
+      stars: (r.wish_fulfilled_at ? 1 : 0) + (r.bonus_wishes_granted ?? 0),
     };
   });
   const hoods = new Set(entries.filter((e) => e.status !== "met").map((e) => e.neighborhood).filter(Boolean));
