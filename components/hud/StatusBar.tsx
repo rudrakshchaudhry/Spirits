@@ -22,7 +22,7 @@ export default function StatusBar() {
           {p.lat.toFixed(5)}, {p.lon.toFixed(5)} · tile {Math.floor(p.x)},{Math.floor(p.y)} · {spirits} spirits loaded
         </div>
       )}
-      <div className="hidden sm:block">WASD / arrows · E meet · B atlas · M map</div>
+      <div className="hidden sm:block">WASD / arrows · E meet · B atlas · T town · M map</div>
     </div>
   );
 }

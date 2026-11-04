@@ -18,7 +18,9 @@ export function exclusiveHoods(type: string): string[] {
 import type { ConditionTag } from "@/lib/conditions/rules";
 import { FAMILY_OF, type PlaceKind, type Rarity, hash32, spawnFor, sfDate } from "./spawn";
 
-const VARIANT_HINT: Record<ConditionTag, string> = {
+export type Variant = ConditionTag | "gathering";
+const VARIANT_HINT: Record<Variant, string> = {
+  gathering: "a GATHERING spirit that only appears when several wanderers gather together in person at this public place: joyful, communal",
   night: "a NIGHT spirit that only appears after dark: quiet, starlit, lantern-loving",
   fog: "a FOG spirit that only appears when the fog rolls in: soft, drifting, misty",
   rain: "a RAIN spirit that only appears in the rain: puddle-happy, pattering",
@@ -66,8 +68,8 @@ export type SpiritCard = CardContent & {
   status: "ready";
   /** unlocked by granting the wish (generated lazily) */
   secret_lore?: string;
-  /** condition variant (night/fog/rain/blossom) */
-  variant?: ConditionTag;
+  /** condition variant (night/fog/rain/blossom) or a gathering spirit */
+  variant?: Variant;
 };
 
 export type PlaceSrc = {
@@ -212,7 +214,7 @@ export function templateCard(p: PlaceSrc): CardContent {
 // ───────────────────────── generation ─────────────────────────
 export type WishHint = { keepsake_type: string; theme: string };
 
-async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint, variant?: ConditionTag): Promise<{ content: CardContent; model: string; moderation: SpiritCard["moderation"] }> {
+async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint, variant?: Variant): Promise<{ content: CardContent; model: string; moderation: SpiritCard["moderation"] }> {
   const near = await nearbyPlaces(p).catch(() => []);
   const user =
     prompt(p, near, rarity) +
@@ -343,7 +345,7 @@ export async function getCachedCard(spiritId: string): Promise<SpiritCard | null
 export function getOrCreateCard(
   placeId: string,
   date = sfDate(),
-  opts: { redoTemplates?: boolean; wishHint?: WishHint; variant?: ConditionTag } = {},
+  opts: { redoTemplates?: boolean; wishHint?: WishHint; variant?: Variant } = {},
 ): Promise<SpiritCard> {
   const spiritId = `${placeId}:${opts.variant ?? "base"}`;
   let p = inflight.get(spiritId);
@@ -358,7 +360,7 @@ export function getOrCreateCard(
 const TEMPLATE_RETRY_MS = 15 * 60_000;
 
 async function createCard(
-  placeId: string, spiritId: string, date: string, redoTemplates = false, wishHint?: WishHint, variant?: ConditionTag,
+  placeId: string, spiritId: string, date: string, redoTemplates = false, wishHint?: WishHint, variant?: Variant,
 ): Promise<SpiritCard> {
   const cached = await getCachedCard(spiritId);
   const stale = cached?.model === "template" && (redoTemplates || Date.now() - Date.parse(cached.generated_at) > TEMPLATE_RETRY_MS);
@@ -380,7 +382,7 @@ async function createCard(
   const place = await getPlace(placeId);
   if (!place) throw new Error(`unknown place ${placeId}`);
   const spawn = spawnFor({ id: place.id, kind: place.kind, rank: place.rank, tags: place.tags, openedAt: place.attrs.opened_at as string | undefined }, date);
-  const rarity: Rarity = variant ? BUMP[spawn?.rarity ?? "common"] : spawn?.rarity ?? "common";
+  const rarity: Rarity = variant === "gathering" ? "legendary" : variant ? BUMP[spawn?.rarity ?? "common"] : spawn?.rarity ?? "common";
   const { content, model, moderation } = await generateContent(place, rarity, wishHint, variant);
   const links = await linkWish(place, content.wish).catch(() => ({ target_place_ids: [], target_hoods: [] }));
   const card: SpiritCard = {
