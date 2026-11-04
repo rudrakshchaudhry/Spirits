@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { gameFor, minDurationMs } from "@/lib/encounter/games";
 import { signEncounter } from "@/lib/encounter/token";
-import { START_TRUST, getOrCreateCard, getPlace } from "@/lib/spirits/card";
+import { START_TRUST, getOrCreateCard, getPlace, wishRiddles } from "@/lib/spirits/card";
+import { checkRiddles } from "@/lib/keepsakes/catalog";
 import { type BonusWish, REVISIT_GAP_MS, makeBonusWish, pickBonusKeepsake, revisitCounts, rollsNewWish } from "@/lib/spirits/bonusWish";
 import type { ConditionTag } from "@/lib/conditions/rules";
 import { devConditionsAllowed, tagsFor } from "@/lib/conditions/server";
@@ -103,7 +104,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       mode: "friend", spirit, place: placeOut, trust: friend.trust, lore: lorePlus, greeting: card.greeting, token,
       rare: friend.status === "rare", wishGranted: !!friend.wish_fulfilled_at,
-      bonusWish: bonus ? { theme: bonus.theme, riddle: bonus.riddles[Math.min(bonus.heard ?? 1, 2) - 1], isNew: newWish } : null,
+      bonusWish: bonus
+        ? { theme: bonus.theme, riddle: checkRiddles(bonus.riddles[0], bonus.riddles[1], bonus.keepsake_type)[Math.min(bonus.heard ?? 1, 2) - 1], isNew: newWish }
+        : null,
       nextChapterIn: counts || lore >= card.lore.length ? null : Math.max(0, Date.parse(chapterClock) + REVISIT_GAP_MS - Date.now()),
     });
   }
@@ -114,7 +117,8 @@ export async function POST(req: Request) {
 
   const trust0 = friend?.trust ?? START_TRUST[card.temperament];
   const riddlesHeard = Math.min(2, (friend?.riddles_heard ?? 0) + 1);
-  const riddle = riddlesHeard >= 2 ? card.wish.riddle_2 : card.wish.riddle_1;
+  const [r1, r2] = wishRiddles(card); // re-checked at serve time (fixes cards cached before the guardrail)
+  const riddle = riddlesHeard >= 2 ? r2 : r1;
   await sb.from("friendships").upsert({
     player_id: player.id,
     spirit_id: spawn.id,

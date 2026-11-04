@@ -229,3 +229,28 @@ describe("revisit wishes (spec §8.4)", () => {
     expect(k).not.toBe("crumb");
   });
 });
+
+describe("wish riddles point at the keepsake", () => {
+  it("recognises the keepsake in many spellings", async () => {
+    const { keyNoun, namesKeepsake } = await import("@/lib/keepsakes/catalog");
+    expect(keyNoun("palm_frond")).toBe("frond");
+    expect(namesKeepsake("long green fronds rustle", "palm_frond")).toBe(true);
+    expect(namesKeepsake("A seashell that still hums.", "sea_shell")).toBe(true);
+    expect(namesKeepsake("a fallen pinecone", "pine_cone")).toBe(true);
+    expect(namesKeepsake("silver eucalyptus leaves whisper", "gum_leaf")).toBe(true);
+    expect(namesKeepsake("a comb missing two teeth", "comb_tooth")).toBe(true);
+    expect(namesKeepsake("A _ribbon_ of __silk__", "ribbon")).toBe(true);
+    expect(namesKeepsake("a keyhole story", "old_brass_key")).toBe(false);
+  });
+  it("replaces drifted riddles with templates and strips markdown", async () => {
+    const { checkRiddles, withArticle } = await import("@/lib/keepsakes/catalog");
+    const [a, b] = checkRiddles("I am not a book…", "I hold countless tales.", "palm_frond");
+    expect(a).toMatch(/a palm frond/);
+    expect(b).toMatch(/a palm frond/);
+    expect(checkRiddles("**Soft** and green", "what am I, if not a **palm frond**?", "palm_frond")).toEqual(["Soft and green", "what am I, if not a palm frond?"]);
+    expect(withArticle("old brass key")).toBe("an old brass key");
+    expect(withArticle("eucalyptus leaf")).toBe("a eucalyptus leaf");
+    expect(withArticle("acorn")).toBe("an acorn");
+    expect(withArticle("sea shell")).toBe("a sea shell");
+  });
+});

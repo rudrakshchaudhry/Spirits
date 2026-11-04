@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { INDEX, es } from "@/lib/es/client";
 import { CHUNKS_PER_HOOD } from "@/lib/keepsakes/glints";
 import { inventoryOf } from "@/lib/keepsakes/server";
-import type { SpiritCard } from "@/lib/spirits/card";
+import { type SpiritCard, wishRiddles } from "@/lib/spirits/card";
+import { checkRiddles } from "@/lib/keepsakes/catalog";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
         ? {
             theme: c.wish.theme,
             keepsake: c.wish.keepsake_type,
-            riddles: [c.wish.riddle_1, c.wish.riddle_2].slice(0, r.riddles_heard),
+            riddles: wishRiddles(c).slice(0, r.riddles_heard),
             glowHoods: r.riddles_heard >= 2 && !r.wish_fulfilled_at ? c.wish.target_hoods : [],
             granted: !!r.wish_fulfilled_at,
           }
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
       bonus: r.bonus_wish
         ? {
             theme: r.bonus_wish.theme,
-            riddles: r.bonus_wish.riddles.slice(0, Math.max(1, r.bonus_wish.heard ?? 1)),
+            riddles: checkRiddles(r.bonus_wish.riddles[0], r.bonus_wish.riddles[1], r.bonus_wish.keepsake_type).slice(0, Math.max(1, r.bonus_wish.heard ?? 1)),
             glowHoods: (r.bonus_wish.heard ?? 1) >= 2 ? r.bonus_wish.target_hoods ?? [] : [],
           }
         : null,

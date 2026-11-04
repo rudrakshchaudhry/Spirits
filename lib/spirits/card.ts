@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { INDEX, es } from "@/lib/es/client";
 import { MODELS, flagged, mistral } from "@/lib/mistral/client";
-import { WISHABLE } from "@/lib/keepsakes/catalog";
+import { WISHABLE, checkRiddles, keepsake as keepsakeOf, templateRiddles } from "@/lib/keepsakes/catalog";
 import { BUSINESS_CATEGORIES, EXCLUSIVE_KEEPSAKES, SPECIES_GROUPS } from "@/lib/places/catalog";
 
 /** Neighbourhoods where an exclusive keepsake (sea shell, paper lantern…) can be found. */
@@ -150,8 +150,8 @@ Return ONLY a JSON object with exactly these keys:
  "wish": {
    "keepsake_type": one of KEEPSAKE_TYPES (pick something from ELSEWHERE in the city, not from this place),
    "theme": string (≤ 8 words, what the wish is about, e.g. "the sound of the sea"),
-   "riddle_1": string (a gentle riddle hinting at the keepsake and where it might be found, never naming the exact place),
-   "riddle_2": string (a second, slightly clearer hint)
+   "riddle_1": string (a gentle riddle about the KEEPSAKE ITSELF — what it looks or feels like, or what kind of place yields it — never naming the exact place),
+   "riddle_2": string (a second, clearer riddle that names the keepsake, e.g. "…a <keepsake> waiting where …")
  },
  "lore": [string, string, string] (three short chapters, each 1–3 sentences, unlocked over repeat visits; facts only from CONTEXT)
 }`;
@@ -189,7 +189,8 @@ export function templateCard(p: PlaceSrc): CardContent {
   const temperament = TEMPERAMENTS[(h >>> 4) % TEMPERAMENTS.length];
   const where = p.neighborhood ? ` in ${p.neighborhood}` : "";
   const want = ALL_KEEPSAKES.filter((k) => !p.keepsake_types.includes(k))[(h >>> 8) % (ALL_KEEPSAKES.length - p.keepsake_types.length)] ?? "sea_shell";
-  const thing = want.replace(/_/g, " ");
+  const thing = keepsakeOf(want).label;
+  const [riddle_1, riddle_2] = templateRiddles(want);
   const what = { tree: "this tree", park: "this park", business: p.name, film: `a scene from ${p.attrs.film_title ?? "a film"}`, art: `"${p.name}"`, landmark: p.name }[p.kind];
   return {
     name,
@@ -199,9 +200,9 @@ export function templateCard(p: PlaceSrc): CardContent {
     greeting: `Oh! A wanderer${where}. I'm ${name}. Stay a moment?`,
     wish: {
       keepsake_type: want,
-      theme: `a ${thing} from far away`,
-      riddle_1: `Somewhere across the city lies a ${thing}. I dream of it most nights.`,
-      riddle_2: `If you wander to a neighbourhood you've never seen, look for a ${thing}.`,
+      theme: `${thing} from far away`,
+      riddle_1,
+      riddle_2,
     },
     lore: [
       `${name} woke here long ago, when ${what} first felt like home.`,
@@ -245,6 +246,8 @@ async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint, var
       const c = parsed.data;
       if (hint) c.wish.keepsake_type = hint.keepsake_type;
       else if (!ALL_KEEPSAKES.includes(c.wish.keepsake_type)) c.wish.keepsake_type = templateCard(p).wish.keepsake_type;
+      // the clearer riddle must actually point at the wished keepsake
+      [c.wish.riddle_1, c.wish.riddle_2] = checkRiddles(c.wish.riddle_1, c.wish.riddle_2, c.wish.keepsake_type);
       const texts = [c.name, c.persona, c.greeting, c.wish.riddle_1, c.wish.riddle_2, ...c.lore];
       const isFlagged = await flagged(texts).catch(() => false);
       if (isFlagged) {
@@ -434,4 +437,9 @@ export async function secretChapter(card: SpiritCard): Promise<string> {
   } catch {}
   await es().update({ index: INDEX.spirits, id: card.spirit_id, doc: { secret_lore: text } }).catch(() => {});
   return text;
+}
+
+/** The card's wish riddles, re-checked at serve time so cards cached before the guardrail are fixed too. */
+export function wishRiddles(card: Pick<SpiritCard, "wish">): [string, string] {
+  return checkRiddles(card.wish.riddle_1, card.wish.riddle_2, card.wish.keepsake_type);
 }
