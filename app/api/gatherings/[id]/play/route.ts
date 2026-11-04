@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { minDurationMs } from "@/lib/encounter/games";
-import { getOrCreateCard } from "@/lib/spirits/card";
-import { coopGame, gatheringById, gatheringResult, isActive } from "@/lib/social/gatherings";
+import { COOP_PASS, awardGathering, coopGame, gatheringById, isActive } from "@/lib/social/gatherings";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
@@ -21,34 +20,20 @@ export async function POST(req: Request, ctx: RouteContext<"/api/gatherings/[id]
   const body = (await req.json().catch(() => ({}))) as { score?: number; durationMs?: number };
   if (!(Number(body.durationMs) >= minDurationMs(coopGame(e)))) return NextResponse.json({ error: "that was suspiciously fast" }, { status: 400 });
   const score = Math.max(0, Math.min(1, Number(body.score) || 0));
-  // the result is final once settled, and each player's FIRST score is the one that counts
-  const before = await gatheringResult(id, e.min_players);
-  if (before.result !== "pending") return NextResponse.json({ error: "this gathering is already settled", result: before.result }, { status: 409 });
-  const { data: inserted, error: insErr } = await sb
-    .from("gathering_scores")
-    .upsert({ event_id: id, player_id: player.id, score }, { onConflict: "event_id,player_id", ignoreDuplicates: true })
-    .select("player_id");
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
-  if (!inserted?.length) return NextResponse.json({ error: "you already played this one" }, { status: 409 });
-
-  const after = await gatheringResult(id, e.min_players);
-  const teamScore = Math.round((after.avg ?? 0) * 100) / 100;
-  if (after.result === "pending") return NextResponse.json({ result: "pending", played: after.played, needed: e.min_players, teamScore });
-  if (after.result === "failed") return NextResponse.json({ result: "failed", played: after.played, teamScore });
-
-  // success: befriend the gathering spirit for everyone checked in
-  const { data: present, error: pErr } = await sb.from("gathering_checkins").select("player_id").eq("event_id", id).eq("verified", true);
-  if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
-  const card = await getOrCreateCard(e.place_id, undefined, { variant: "gathering" });
-  const now = new Date().toISOString();
-  const { error: fErr } = await sb.from("friendships").upsert(
-    (present ?? []).map((p) => ({
-      player_id: p.player_id, spirit_id: card.spirit_id, place_id: card.place_id, family: card.family, rarity: card.rarity,
-      spirit_name: card.name, place_name: card.place_name, neighborhood: card.neighborhood, look: card.look ?? null,
-      sprite_seed: card.sprite_seed, trust: 100, status: "rare", riddles_heard: 0, lore_unlocked: 1, befriended_at: now, last_visit_at: now,
-    })),
-    { onConflict: "player_id,spirit_id", ignoreDuplicates: true },
-  );
-  if (fErr) return NextResponse.json({ error: "the spirit couldn't settle in — try again" }, { status: 500 });
-  return NextResponse.json({ result: "success", played: after.played, teamScore, spirit: card.name, lore: card.lore[0] });
+  // atomic: per-event lock, first score per player, only the first min_players count, final once settled
+  const { data, error } = await sb.rpc("settle_gathering", { p_event: id, p_player: player.id, p_score: score, p_min: e.min_players, p_pass: COOP_PASS });
+  if (error) return NextResponse.json({ error: "please try again in a moment" }, { status: 503 });
+  const r = data as { result: string; settled_before?: boolean; played?: number; avg?: number };
+  if (r.result === "already") return NextResponse.json({ error: "you already played this one" }, { status: 409 });
+  if (r.settled_before) return NextResponse.json({ error: "this gathering is already settled", result: r.result }, { status: 409 });
+  const teamScore = Math.round((r.avg ?? 0) * 100) / 100;
+  if (r.result === "pending") return NextResponse.json({ result: "pending", played: r.played, needed: e.min_players, teamScore });
+  if (r.result === "failed") return NextResponse.json({ result: "failed", played: r.played, teamScore });
+  // success: befriend everyone present (idempotent — the room GET retries it if this fails)
+  try {
+    const card = await awardGathering(e);
+    return NextResponse.json({ result: "success", played: r.played, teamScore, spirit: card?.name, lore: card?.lore[0] });
+  } catch {
+    return NextResponse.json({ result: "success", played: r.played, teamScore, pendingAward: true });
+  }
 }

@@ -9,6 +9,13 @@ export const EXPLORE_LIMITS = { perRequest: 10, newPerWindow: 40, windowMs: 5 * 
 
 const VALID = /^\d{1,3}_\d{1,3}$/;
 
+/** Static filtering only: valid land chunk keys, at most perRequest; the rest is overflow. */
+export function validChunkKeys(requested: unknown): { keys: string[]; overflow: string[] } {
+  const valid = [...new Set((Array.isArray(requested) ? requested : []).filter((k): k is string => typeof k === "string" && VALID.test(k)))]
+    .filter((k) => chunkHood(k) !== null);
+  return { keys: valid.slice(0, EXPLORE_LIMITS.perRequest), overflow: valid.slice(EXPLORE_LIMITS.perRequest) };
+}
+
 export function admitChunks(requested: unknown, alreadyExplored: Set<string>, recentNew: number) {
   const valid = [...new Set((Array.isArray(requested) ? requested : []).filter((k): k is string => typeof k === "string" && VALID.test(k)))]
     .filter((k) => chunkHood(k) !== null); // land chunks inside a neighbourhood only

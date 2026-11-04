@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { inventoryOf } from "@/lib/keepsakes/server";
+import { friendUnlocks } from "@/lib/social/server";
 import { TRADE_LIMITS, cleanBag, tradesToday } from "@/lib/social/trades";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -40,6 +41,8 @@ export async function POST(req: Request, ctx: RouteContext<"/api/trades/[id]">) 
       const offer = cleanBag(body.offer), request = cleanBag(body.request);
       if (typeof offer === "string" || typeof request === "string") return NextResponse.json({ error: typeof offer === "string" ? offer : request }, { status: 400 });
       // same rules as a fresh proposal
+      const [meU, themU] = await Promise.all([friendUnlocks(player.id), friendUnlocks(t.from_id)]);
+      if (!meU.trading || !themU.trading) return NextResponse.json({ error: "trading isn't unlocked for both of you" }, { status: 403 });
       if (!Object.keys(offer).length && !Object.keys(request).length) return NextResponse.json({ error: "add something to the trade" }, { status: 400 });
       if ((await tradesToday(player.id)) >= TRADE_LIMITS.perDay) return NextResponse.json({ error: "that's enough trades for today" }, { status: 429 });
       const inv = await inventoryOf(player.id).catch(() => null);

@@ -11,19 +11,16 @@ export async function GET(req: Request) {
   if (!me.gatherings) return NextResponse.json({ error: "befriend 10 spirits to unlock gatherings", locked: true }, { status: 403 });
   const events = await activeGatherings();
   if (!events.length) return NextResponse.json({ gatherings: [], demo: me.demo });
-  // two queries total (not two per event)
-  const { data: rows, error } = await supabaseAdmin()
-    .from("gathering_checkins")
-    .select("event_id,player_id")
-    .in("event_id", events.map((e) => e.id))
-    .eq("verified", true);
-  if (error) return NextResponse.json({ error: "please try again in a moment" }, { status: 503 });
-  const count: Record<string, number> = {};
-  const mine = new Set<string>();
-  for (const r of rows ?? []) {
-    count[r.event_id] = (count[r.event_id] ?? 0) + 1;
-    if (r.player_id === player.id) mine.add(r.event_id);
-  }
+  // exact per-event counts (head queries have no row cap) + one query for my own check-ins
+  const sb = supabaseAdmin();
+  const ids = events.map((e) => e.id);
+  const [counts, mineRes] = await Promise.all([
+    Promise.all(ids.map((id) => sb.from("gathering_checkins").select("*", { count: "exact", head: true }).eq("event_id", id).eq("verified", true))),
+    sb.from("gathering_checkins").select("event_id").eq("player_id", player.id).in("event_id", ids).eq("verified", true),
+  ]);
+  if (mineRes.error || counts.some((c) => c.error)) return NextResponse.json({ error: "please try again in a moment" }, { status: 503 });
+  const count: Record<string, number> = Object.fromEntries(ids.map((id, i) => [id, counts[i].count ?? 0]));
+  const mine = new Set((mineRes.data ?? []).map((r) => r.event_id));
   return NextResponse.json({
     gatherings: events.map((e) => ({ id: e.id, name: e.name, neighborhood: e.neighborhood, ends_at: e.ends_at, min_players: e.min_players, checkedIn: count[e.id] ?? 0, me: mine.has(e.id) })),
     demo: me.demo,

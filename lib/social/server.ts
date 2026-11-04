@@ -105,6 +105,7 @@ export async function friendUnlocks(playerId: string): Promise<{ trading: boolea
     sb.from("friendships").select("*", { count: "exact", head: true }).eq("player_id", playerId).neq("status", "met"),
   ]);
   const demo = !!p?.demo_mode && devConditionsAllowed();
-  const f = count ?? 0;
-  return { trading: demo || f >= 5, gatherings: demo || f >= 10, demo };
+  // same thresholds as the HUD (rules.ts) — hoods don't matter for these two unlocks
+  const u = unlocksFor({ friends: count ?? 0, hoods: 0, wishes: 0, topHoods: [] }, demo);
+  return { trading: u.trading, gatherings: u.gatherings, demo };
 }

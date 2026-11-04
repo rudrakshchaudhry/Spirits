@@ -20,7 +20,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/gatherings/[id]
   const me = await friendUnlocks(player.id);
   if (!me.gatherings) return NextResponse.json({ error: "befriend 10 spirits to unlock gatherings" }, { status: 403 });
   // once the co-op is settled, the gathering spirit has come and gone
-  if ((await gatheringResult(id, e.min_players)).result !== "pending") {
+  const settled = await gatheringResult(id, e.min_players).then((r) => r.result !== "pending", () => null);
+  if (settled === null) return NextResponse.json({ error: "please try again in a moment" }, { status: 503 });
+  if (settled) {
     return NextResponse.json({ error: "this gathering already happened — catch the next one" }, { status: 409 });
   }
   const body = (await req.json().catch(() => ({}))) as { lat?: number; lon?: number; accuracy?: number; demo?: boolean };

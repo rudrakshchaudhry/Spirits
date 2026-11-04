@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { chunkHood } from "@/lib/keepsakes/glints";
-import { EXPLORE_LIMITS, admitChunks } from "@/lib/social/explore";
+import { EXPLORE_LIMITS, validChunkKeys } from "@/lib/social/explore";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
@@ -17,8 +17,7 @@ export async function POST(req: Request) {
   const { chunks } = (await req.json().catch(() => ({}))) as { chunks?: unknown };
   const candidates = Array.isArray(chunks) ? chunks.filter((k): k is string => typeof k === "string").slice(0, 50) : [];
   // static filtering (land chunks, per-request cap) — the budget is applied in SQL
-  const { revisits, fresh, deferred: overflow } = admitChunks(candidates, new Set(), 0);
-  const keys = [...revisits, ...fresh];
+  const { keys, overflow } = validChunkKeys(candidates);
   if (!keys.length) return NextResponse.json({ ok: true, accepted: [], deferred: overflow });
   const { data, error } = await supabaseAdmin().rpc("admit_chunks", {
     p_player: player.id,

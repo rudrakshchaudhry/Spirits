@@ -263,7 +263,6 @@ function GatheringRoom({ id, onBack, demoAllowed }: { id: string; onBack: () => 
   const [msg, setMsg] = useState("");
   const [playing, setPlaying] = useState(false);
   const [online, setOnline] = useState<string[]>([]);
-  const me = useGame((s) => s.me);
   const load = useCallback(() => api<Room>(`/api/gatherings/${id}`).then(setRoom, (e) => setMsg((e as Error).message)), [id]);
   useEffect(() => {
     load();
@@ -276,16 +275,18 @@ function GatheringRoom({ id, onBack, demoAllowed }: { id: string; onBack: () => 
   useEffect(() => {
     if (!room?.checkedIn || joined.current) return;
     joined.current = true;
-    const ch = supabase().channel(`gathering:${id}`, { config: { presence: { key: me?.profile?.handle ?? "wanderer" } } });
+    // The Realtime channel is public, so presence carries a random per-session id and
+    // nothing else: it can only ever reveal HOW MANY are online, never who.
+    const ch = supabase().channel(`gathering:${id}`, { config: { presence: { key: crypto.randomUUID() } } });
     ch.on("presence", { event: "sync" }, () => setOnline(Object.keys(ch.presenceState())))
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") ch.track({ handle: me?.profile?.handle, companion: me?.companion?.species ?? null });
+        if (status === "SUBSCRIBED") ch.track({});
       });
     return () => {
       supabase().removeChannel(ch);
       joined.current = false;
     };
-  }, [room?.checkedIn, id, me]);
+  }, [room?.checkedIn, id]);
 
   const checkin = (demo: boolean) => {
     setMsg("");
@@ -319,9 +320,10 @@ function GatheringRoom({ id, onBack, demoAllowed }: { id: string; onBack: () => 
         {room.teamScore !== null && ` · team score ${Math.round(room.teamScore * 100)}%`}
       </p>
       {msg && <p className="text-sm text-rose-300">{msg}</p>}
-      {room.result === "success" && <p className="rounded bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-100">✦ The gathering spirit befriends everyone here! It&apos;s in your Atlas.</p>}
-      {room.result === "failed" && <p className="text-sm text-slate-300">The spirit drifts off — the team score wasn&apos;t quite enough this time.</p>}
-      {!room.checkedIn ? (
+      {room.result !== "pending" && !room.checkedIn && <p className="text-sm text-slate-300">This gathering already happened — catch the next one.</p>}
+      {room.result === "success" && room.checkedIn && <p className="rounded bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-100">✦ The gathering spirit befriends everyone here! It&apos;s in your Atlas.</p>}
+      {room.result === "failed" && room.checkedIn && <p className="text-sm text-slate-300">The spirit drifts off — the team score wasn&apos;t quite enough this time.</p>}
+      {room.result !== "pending" && !room.checkedIn ? null : !room.checkedIn ? (
         <div className="flex gap-2">
           <button type="button" onClick={() => checkin(false)} className="rounded bg-amber-300 px-3 py-1.5 text-sm text-slate-900">Check in here</button>
           {demoAllowed && <button type="button" onClick={() => checkin(true)} className="rounded border border-amber-300/40 px-3 py-1.5 text-sm text-amber-100">DEMO CHECK-IN</button>}
