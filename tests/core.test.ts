@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { activeTags, condKey, conditionKeepsakes, parseCondKey } from "@/lib/conditions/rules";
 import { minDurationMs, mosaicFor, rhythmFor, rushFor } from "@/lib/encounter/games";
 import { signEncounter, verifyEncounter } from "@/lib/encounter/token";
@@ -289,5 +289,28 @@ describe("checkpoint G review fixes", () => {
     const { cleanBag } = await import("@/lib/social/trades");
     expect(cleanBag({ constructor: 1 })).toMatch(/unknown keepsake/);
     expect(cleanBag({ toString: 1 })).toMatch(/unknown keepsake/);
+  });
+});
+
+describe("live weather parsing (Open-Meteo)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const stub = async (status: number, body: unknown) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status })));
+    const { computeConditions } = await import("@/lib/conditions/server");
+    return computeConditions(new Date("2026-11-04T20:00:00Z"));
+  };
+  it("a null visibility is not fog; real low cloud + humidity is", async () => {
+    const a = await stub(200, { current: { visibility: null, cloud_cover_low: 10, relative_humidity_2m: 60, precipitation: 0, temperature_2m: 15 } });
+    expect(a.fog).toBe(false);
+    expect(a.source).toBe("live");
+    const b = await stub(200, { current: { visibility: null, cloud_cover_low: 95, relative_humidity_2m: 96, precipitation: 0.3, temperature_2m: 12 } });
+    expect(b.fog).toBe(true);
+    expect(b.rain).toBe(true);
+  });
+  it("bad status or empty payload falls back to clear skies", async () => {
+    expect((await stub(503, {})).source).toBe("fallback");
+    const c = await stub(200, { current: {} });
+    expect(c.source).toBe("fallback");
+    expect(c.fog).toBe(false);
   });
 });
