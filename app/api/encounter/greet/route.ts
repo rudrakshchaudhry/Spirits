@@ -1,6 +1,7 @@
 import { verifyEncounter } from "@/lib/encounter/token";
 import { MODELS, mistral } from "@/lib/mistral/client";
 import { getCachedCard } from "@/lib/spirits/card";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
  * GET /api/encounter/greet?token=…  → text/plain stream (spec §7.3 "Live greeting").
@@ -8,17 +9,14 @@ import { getCachedCard } from "@/lib/spirits/card";
  * hasn't arrived after 2.5 s (or on any error).
  */
 const FIRST_TOKEN_MS = 2500;
+const TOTAL_MS = 8000; // hard deadline for the whole live greeting
 const GREET_FRESH_MS = 2 * 60_000;
 const GREETS_PER_MIN = 6;
-const recent = new Map<string, number[]>();
 
-function allowGreet(playerId: string, now = Date.now()) {
-  const hits = (recent.get(playerId) ?? []).filter((t) => now - t < 60_000);
-  if (hits.length >= GREETS_PER_MIN) return false;
-  hits.push(now);
-  recent.set(playerId, hits);
-  if (recent.size > 5000) for (const [k, v] of recent) if (!v.some((t) => now - t < 60_000)) recent.delete(k);
-  return true;
+/** Shared across instances (rate_hit RPC); on a DB error, fall back to the cached greeting. */
+async function allowGreet(playerId: string) {
+  const { data, error } = await supabaseAdmin().rpc("rate_hit", { p_key: `greet:${playerId}`, p_window_s: 60, p_max: GREETS_PER_MIN });
+  return !error && data === true;
 }
 
 function sfMoment() {
@@ -36,8 +34,9 @@ export async function GET(req: Request) {
   const fallback = card.greeting;
   const encoder = new TextEncoder();
   // Live greetings cost a model call: only for fresh tokens, and a few per player per minute.
-  // (Best-effort per instance; anything over the limit gets the cached greeting.)
-  const live = Date.now() - claims.t0 < GREET_FRESH_MS && allowGreet(claims.u);
+  // Anything over the limit gets the cached greeting.
+  const live = Date.now() - claims.t0 < GREET_FRESH_MS && (await allowGreet(claims.u));
+  const abort = new AbortController();
   let done = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -46,6 +45,8 @@ export async function GET(req: Request) {
         if (done) return;
         done = true;
         clearTimeout(timer);
+        clearTimeout(deadline);
+        abort.abort(); // stop the upstream model stream too
         try {
           if (text) controller.enqueue(encoder.encode(text));
           controller.close();
@@ -56,6 +57,8 @@ export async function GET(req: Request) {
       const timer = setTimeout(() => {
         if (!sentAny) finish(fallback);
       }, FIRST_TOKEN_MS);
+      // a stream that stalls after its first token still ends (with what was sent so far)
+      const deadline = setTimeout(() => finish(sentAny ? undefined : fallback), TOTAL_MS);
       if (!live) return finish(fallback);
       try {
         const res = await mistral().chat.stream({
@@ -75,7 +78,7 @@ export async function GET(req: Request) {
               content: `It is ${sfMoment()} in San Francisco. ${claims.trust0 > 60 ? "You already trust this wanderer a little." : "You have never met this wanderer."} Say hello.`,
             },
           ],
-        });
+        }, { signal: abort.signal });
         for await (const ev of res) {
           if (done) break; // fallback already sent (or the client left): stop the live stream
           const piece = ev.data.choices[0]?.delta?.content;
@@ -92,6 +95,7 @@ export async function GET(req: Request) {
     },
     cancel() {
       done = true;
+      abort.abort();
     },
   });
   return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });

@@ -119,7 +119,11 @@ export async function POST(req: Request) {
   const riddlesHeard = Math.min(2, (friend?.riddles_heard ?? 0) + 1);
   const [r1, r2] = wishRiddles(card); // re-checked at serve time (fixes cards cached before the guardrail)
   const riddle = riddlesHeard >= 2 ? r2 : r1;
-  const visit = { riddles_heard: riddlesHeard, last_visit_at: new Date().toISOString() };
+  // card/place-derived fields are refreshed on every visit (backfills old placeholder sprites)
+  const visit = {
+    family: card.family, rarity: card.rarity, spirit_name: card.name, place_name: place.name, neighborhood: place.neighborhood,
+    look: card.look ?? null, sprite_seed: card.sprite_seed, riddles_heard: riddlesHeard, last_visit_at: new Date().toISOString(),
+  };
   // Existing row: touch it only while still "met", so a concurrent /play that just befriended
   // the spirit isn't reverted. New row: insert, ignoring a concurrent insert of the same pair.
   if (friend) await sb.from("friendships").update(visit).eq("player_id", player.id).eq("spirit_id", spawn.id).eq("status", "met");
@@ -127,13 +131,6 @@ export async function POST(req: Request) {
     player_id: player.id,
     spirit_id: spawn.id,
     place_id: place.id,
-    family: card.family,
-    rarity: card.rarity,
-    spirit_name: card.name,
-    place_name: place.name,
-    neighborhood: place.neighborhood,
-    look: card.look ?? null,
-    sprite_seed: card.sprite_seed,
     trust: trust0,
     status: "met",
     ...visit,
