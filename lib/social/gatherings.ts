@@ -1,4 +1,5 @@
 import { INDEX, es } from "@/lib/es/client";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { hash32 } from "@/lib/spirits/spawn";
 import type { RhythmGame } from "@/lib/encounter/games";
 
@@ -50,4 +51,14 @@ export function metersBetween(a: { lat: number; lon: number }, b: { lat: number;
 /** Everyone at a gathering plays the same pattern (co-op rhythm, spec §14.3). */
 export function coopGame(e: GatheringEvent): RhythmGame {
   return { type: "rhythm", title: "Gathering song", bpm: 104, notes: 24, seed: hash32(e.id), difficulty: 0.4, flavor: "Everyone here plays the same song — the team score is the average." };
+}
+
+/** Co-op result: settled once min_players have played (scores are first-play-only). */
+export async function gatheringResult(eventId: string, minPlayers: number) {
+  const { data, error } = await supabaseAdmin().from("gathering_scores").select("player_id,score").eq("event_id", eventId);
+  if (error) throw new Error(error.message);
+  const scores = data ?? [];
+  const avg = scores.length ? scores.reduce((a, s) => a + s.score, 0) / scores.length : null;
+  const result: "pending" | "success" | "failed" = scores.length < minPlayers ? "pending" : avg! >= COOP_PASS ? "success" : "failed";
+  return { result, played: scores.length, avg, playerIds: scores.map((s) => s.player_id) };
 }

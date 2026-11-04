@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { inventoryOf } from "@/lib/keepsakes/server";
-import { meFor } from "@/lib/social/server";
+import { friendUnlocks } from "@/lib/social/server";
 import { TRADE_LIMITS, cleanBag, handlesFor, tradesToday } from "@/lib/social/trades";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -27,8 +27,7 @@ export async function POST(req: Request) {
   const player = await playerFrom(req);
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
   const body = (await req.json().catch(() => ({}))) as { to?: string; offer?: unknown; request?: unknown };
-  const me = await meFor(player.id);
-  if (!me.unlocks.trading) return NextResponse.json({ error: "befriend 5 spirits to unlock trading" }, { status: 403 });
+  if (!(await friendUnlocks(player.id)).trading) return NextResponse.json({ error: "befriend 5 spirits to unlock trading" }, { status: 403 });
   const offer = cleanBag(body.offer), request = cleanBag(body.request);
   if (typeof offer === "string") return NextResponse.json({ error: offer }, { status: 400 });
   if (typeof request === "string") return NextResponse.json({ error: request }, { status: 400 });
@@ -38,7 +37,7 @@ export async function POST(req: Request) {
   const sb = supabaseAdmin();
   const { data: target } = await sb.from("profiles").select("id").eq("handle", String(body.to ?? "").trim().toLowerCase()).maybeSingle();
   if (!target || target.id === player.id) return NextResponse.json({ error: "no wanderer by that name" }, { status: 404 });
-  if (!(await meFor(target.id)).unlocks.trading) return NextResponse.json({ error: "they haven't unlocked trading yet" }, { status: 403 });
+  if (!(await friendUnlocks(target.id)).trading) return NextResponse.json({ error: "they haven't unlocked trading yet" }, { status: 403 });
   const inv = await inventoryOf(player.id).catch(() => ({}) as Record<string, number>);
   for (const [k, n] of Object.entries(offer)) if ((inv[k] ?? 0) < n) return NextResponse.json({ error: "you don't have all of that" }, { status: 400 });
 

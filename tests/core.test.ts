@@ -274,3 +274,20 @@ describe("wish riddles point at the keepsake", () => {
     expect(withArticle("sea shell")).toBe("a sea shell");
   });
 });
+
+describe("checkpoint G review fixes", () => {
+  it("weekStart is Monday 00:00 PT even across DST changes", async () => {
+    const { weekStart } = await import("@/lib/social/server");
+    // Sun 2026-03-08 after the spring-forward: week began Mon 2026-03-02 00:00 PST = 08:00Z
+    expect(weekStart(new Date("2026-03-08T18:00:00Z")).toISOString()).toBe("2026-03-02T08:00:00.000Z");
+    // Sun 2026-11-01 after fall-back: week began Mon 2026-10-26 00:00 PDT = 07:00Z
+    expect(weekStart(new Date("2026-11-01T18:00:00Z")).toISOString()).toBe("2026-10-26T07:00:00.000Z");
+    // Monday 00:30 PT belongs to the new week
+    expect(weekStart(new Date("2026-11-09T08:30:00Z")).toISOString()).toBe("2026-11-09T08:00:00.000Z");
+  });
+  it("trade bags reject prototype keys", async () => {
+    const { cleanBag } = await import("@/lib/social/trades");
+    expect(cleanBag({ constructor: 1 })).toMatch(/unknown keepsake/);
+    expect(cleanBag({ toString: 1 })).toMatch(/unknown keepsake/);
+  });
+});

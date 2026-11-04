@@ -9,7 +9,7 @@ export function cleanBag(raw: unknown): Record<string, number> | string {
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     const n = Number(v);
-    if (!KEEPSAKES[k]) return `unknown keepsake ${k}`;
+    if (!Object.hasOwn(KEEPSAKES, k)) return `unknown keepsake ${k}`;
     if (!Number.isInteger(n) || n < 1) return "quantities must be whole numbers";
     if (n > TRADE_LIMITS.perItem) return `at most ${TRADE_LIMITS.perItem} of one keepsake per trade`;
     out[k] = n;

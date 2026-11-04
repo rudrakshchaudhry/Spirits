@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   const rank = myHood ? rows.findIndex((r) => r.hood === myHood) + 1 : 0;
   const sb = supabaseAdmin();
   const [{ count: chunks }, { count: friends }, { count: wishes }] = await Promise.all([
-    sb.from("explored_chunks").select("*", { count: "exact", head: true }).eq("player_id", player.id).gte("first_at", since),
+    sb.from("explored_chunks").select("*", { count: "exact", head: true }).eq("player_id", player.id).gte("first_at", since).not("neighborhood", "is", null),
     sb.from("friendships").select("*", { count: "exact", head: true }).eq("player_id", player.id).gte("befriended_at", since),
     sb.from("friendships").select("*", { count: "exact", head: true }).eq("player_id", player.id).gte("wish_fulfilled_at", since),
   ]);

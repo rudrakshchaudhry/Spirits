@@ -226,6 +226,7 @@ type Room = {
   event: { id: string; name: string; neighborhood: string; min_players: number };
   spirit: { name: string; family: string; rarity: string; look: string | null; seed: number; persona: string } | null;
   roster: { handle: string; demo: boolean }[];
+  hereCount: number;
   checkedIn: boolean;
   played: number;
   youPlayed: boolean;
@@ -314,7 +315,7 @@ function GatheringRoom({ id, onBack, demoAllowed }: { id: string; onBack: () => 
         </div>
       </div>
       <p className="text-xs text-slate-400">
-        Here: {room.roster.map((r) => r.handle + (r.demo ? " (demo)" : "")).join(", ") || "nobody yet"} · online now: {online.length} · played {room.played}/{room.event.min_players}
+        Here: {room.checkedIn ? room.roster.map((r) => r.handle + (r.demo ? " (demo)" : "")).join(", ") || "nobody yet" : `${room.hereCount} wanderer${room.hereCount === 1 ? "" : "s"} (check in to see who)`} · online now: {online.length} · played {room.played}/{room.event.min_players}
         {room.teamScore !== null && ` · team score ${Math.round(room.teamScore * 100)}%`}
       </p>
       {msg && <p className="text-sm text-rose-300">{msg}</p>}

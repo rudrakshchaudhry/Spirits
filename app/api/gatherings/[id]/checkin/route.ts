@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { devConditionsAllowed } from "@/lib/conditions/server";
 import { CHECKIN, gatheringById, isActive, metersBetween } from "@/lib/social/gatherings";
-import { meFor } from "@/lib/social/server";
+import { friendUnlocks } from "@/lib/social/server";
+import { gatheringResult } from "@/lib/social/gatherings";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
 /**
@@ -16,8 +17,12 @@ export async function POST(req: Request, ctx: RouteContext<"/api/gatherings/[id]
   const { id } = await ctx.params;
   const e = await gatheringById(id);
   if (!e || !isActive(e)) return NextResponse.json({ error: "this gathering isn't happening right now" }, { status: 404 });
-  const me = await meFor(player.id);
-  if (!me.unlocks.gatherings) return NextResponse.json({ error: "befriend 10 spirits to unlock gatherings" }, { status: 403 });
+  const me = await friendUnlocks(player.id);
+  if (!me.gatherings) return NextResponse.json({ error: "befriend 10 spirits to unlock gatherings" }, { status: 403 });
+  // once the co-op is settled, the gathering spirit has come and gone
+  if ((await gatheringResult(id, e.min_players)).result !== "pending") {
+    return NextResponse.json({ error: "this gathering already happened — catch the next one" }, { status: 409 });
+  }
   const body = (await req.json().catch(() => ({}))) as { lat?: number; lon?: number; accuracy?: number; demo?: boolean };
 
   let demo = false;
