@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import { gameFor, minDurationMs } from "@/lib/encounter/games";
 import { signEncounter } from "@/lib/encounter/token";
 import { START_TRUST, getOrCreateCard, getPlace } from "@/lib/spirits/card";
-import { type BonusWish, makeBonusWish, pickBonusKeepsake, revisitCounts, rollsNewWish } from "@/lib/spirits/bonusWish";
-import { devConditionsAllowed } from "@/lib/conditions/server";
+import { type BonusWish, REVISIT_GAP_MS, makeBonusWish, pickBonusKeepsake, revisitCounts, rollsNewWish } from "@/lib/spirits/bonusWish";
 import type { ConditionTag } from "@/lib/conditions/rules";
-import { tagsFor } from "@/lib/conditions/server";
+import { devConditionsAllowed, tagsFor } from "@/lib/conditions/server";
 import { conditionSpawn, sfDate, spawnFor } from "@/lib/spirits/spawn";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 import { featuredDay, featuredFor } from "@/lib/world/featured";
@@ -63,17 +62,39 @@ export async function POST(req: Request) {
   // Already friends → revisit (spec §8.4): after 24 h (any visit on dev/demo builds) the next
   // chapter unlocks, and ~30% of those revisits bring a new wish once the first is granted.
   if (friend && friend.status !== "met") {
-    const counts = revisitCounts(friend.last_visit_at, Date.now(), devConditionsAllowed());
+    // the chapter clock is its own column so gifts (which touch last_visit_at) don't reset it
+    const chapterClock = friend.last_chapter_at ?? friend.befriended_at ?? friend.last_visit_at;
+    const counts = revisitCounts(chapterClock, Date.now(), devConditionsAllowed());
     const lore = counts ? Math.min(card.lore.length, Math.max(1, friend.lore_unlocked + 1)) : Math.max(1, friend.lore_unlocked);
+    const today = sfDate();
     let bonus = friend.bonus_wish as BonusWish | null;
     let newWish = false;
-    if (counts && !bonus && friend.wish_fulfilled_at && rollsNewWish(player.id, spawn.id, sfDate())) {
-      bonus = await makeBonusWish(card, place, pickBonusKeepsake(card, place, `${player.id}|${spawn.id}|${sfDate()}`));
-      newWish = true;
+    if (bonus && (bonus.heard ?? 1) < 2) {
+      // second visit with the wish open → second riddle (and the Atlas may glow now)
+      bonus = { ...bonus, heard: 2 };
+      await sb.from("friendships").update({ bonus_wish: bonus }).eq("player_id", player.id).eq("spirit_id", spawn.id);
+    } else if (counts && !bonus && friend.wish_fulfilled_at && friend.bonus_wish_rolled_on !== today && rollsNewWish(player.id, spawn.id, today)) {
+      // at most one roll per player, spirit and day; claim it first so concurrent starts can't double-generate
+      const { data: claimed } = await sb
+        .from("friendships")
+        .update({ bonus_wish_rolled_on: today })
+        .eq("player_id", player.id)
+        .eq("spirit_id", spawn.id)
+        .or(`bonus_wish_rolled_on.is.null,bonus_wish_rolled_on.neq.${today}`)
+        .select("spirit_id");
+      if (claimed?.length) {
+        bonus = await makeBonusWish(card, place, pickBonusKeepsake(card, place, `${player.id}|${spawn.id}|${today}`));
+        newWish = true;
+      }
     }
     await sb
       .from("friendships")
-      .update({ lore_unlocked: lore, ...(counts ? { last_visit_at: new Date().toISOString() } : {}), ...(newWish ? { bonus_wish: bonus } : {}) })
+      .update({
+        lore_unlocked: lore,
+        last_visit_at: new Date().toISOString(),
+        ...(counts ? { last_chapter_at: new Date().toISOString() } : {}),
+        ...(newWish ? { bonus_wish: bonus } : {}),
+      })
       .eq("player_id", player.id)
       .eq("spirit_id", spawn.id);
     // Friends can still be given a gift (granting the wish makes the friendship rare).
@@ -82,8 +103,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       mode: "friend", spirit, place: placeOut, trust: friend.trust, lore: lorePlus, greeting: card.greeting, token,
       rare: friend.status === "rare", wishGranted: !!friend.wish_fulfilled_at,
-      bonusWish: bonus ? { theme: bonus.theme, riddle: bonus.riddles[0], isNew: newWish } : null,
-      nextChapterIn: counts ? null : Math.max(0, Date.parse(friend.last_visit_at) + 24 * 3600_000 - Date.now()),
+      bonusWish: bonus ? { theme: bonus.theme, riddle: bonus.riddles[Math.min(bonus.heard ?? 1, 2) - 1], isNew: newWish } : null,
+      nextChapterIn: counts || lore >= card.lore.length ? null : Math.max(0, Date.parse(chapterClock) + REVISIT_GAP_MS - Date.now()),
     });
   }
 

@@ -43,7 +43,11 @@ export async function GET(req: Request) {
         : null,
       // a revisit wish is open: show its first riddle and glow toward where it can be found
       bonus: r.bonus_wish
-        ? { theme: r.bonus_wish.theme, riddles: r.bonus_wish.riddles.slice(0, 1), glowHoods: r.bonus_wish.target_hoods ?? [] }
+        ? {
+            theme: r.bonus_wish.theme,
+            riddles: r.bonus_wish.riddles.slice(0, Math.max(1, r.bonus_wish.heard ?? 1)),
+            glowHoods: (r.bonus_wish.heard ?? 1) >= 2 ? r.bonus_wish.target_hoods ?? [] : [],
+          }
         : null,
       stars: (r.wish_fulfilled_at ? 1 : 0) + (r.bonus_wishes_granted ?? 0),
     };

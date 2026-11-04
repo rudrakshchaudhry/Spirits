@@ -12,7 +12,9 @@ import { type PlaceSrc, type SpiritCard, linkWish } from "./card";
 export const REVISIT_GAP_MS = 24 * 3600_000;
 export const NEW_WISH_CHANCE = 0.3;
 
-export type BonusWish = { keepsake_type: string; theme: string; riddles: [string, string]; target_hoods: string[]; created_at: string };
+/** `heard`: riddles heard so far (1 on the visit it appears, 2 on the next) — glow needs both (spec §8.3). */
+export type BonusWish = { keepsake_type: string; theme: string; riddles: [string, string]; target_hoods: string[]; created_at: string; heard: number };
+const GEN_TIMEOUT_MS = 6000;
 
 /** Does this visit count as a revisit (unlocks a chapter, may bring a wish)? */
 export function revisitCounts(lastVisitIso: string | null, now = Date.now(), relaxed = false) {
@@ -41,7 +43,7 @@ export async function makeBonusWish(card: SpiritCard, place: PlaceSrc, keepsakeT
     `Try a neighbourhood you rarely visit — a ${label} is waiting there.`,
   ];
   try {
-    const res = await mistral().chat.complete({
+    const call = mistral().chat.complete({
       model: MODELS.persona,
       temperature: 0.8,
       responseFormat: { type: "json_object" },
@@ -55,6 +57,8 @@ export async function makeBonusWish(card: SpiritCard, place: PlaceSrc, keepsakeT
         { role: "user", content: `<CONTEXT>${JSON.stringify({ spirit: card.name, persona: card.persona, voice: card.voice_notes, new_wish_keepsake: label, previous_wish: card.wish.theme })}</CONTEXT>` },
       ],
     });
+    // keep /encounter/start snappy: fall back to the template if Mistral is slow
+    const res = await Promise.race([call, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), GEN_TIMEOUT_MS))]);
     const raw = res.choices[0]?.message?.content;
     const parsed = Schema.safeParse(JSON.parse(typeof raw === "string" ? raw : ""));
     if (parsed.success && !(await flagged([parsed.data.theme, parsed.data.riddle_1, parsed.data.riddle_2]).catch(() => true))) {
@@ -65,5 +69,5 @@ export async function makeBonusWish(card: SpiritCard, place: PlaceSrc, keepsakeT
     /* template fallback */
   }
   const links = await linkWish(place, { keepsake_type: keepsakeType, theme }).catch(() => ({ target_place_ids: [], target_hoods: [] as string[] }));
-  return { keepsake_type: keepsakeType, theme, riddles, target_hoods: links.target_hoods, created_at: new Date().toISOString() };
+  return { keepsake_type: keepsakeType, theme, riddles, target_hoods: links.target_hoods, created_at: new Date().toISOString(), heard: 1 };
 }

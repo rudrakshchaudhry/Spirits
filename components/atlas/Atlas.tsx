@@ -178,7 +178,7 @@ function Wishes({ entries }: { entries: Entry[] }) {
           ))}
           {e.bonus && (
             <p className="mt-1 text-sm italic text-amber-100">
-              ✦ New wish ({e.bonus.theme}): {e.bonus.riddles[0]}
+              ✦ New wish ({e.bonus.theme}): {e.bonus.riddles.join(" … ")}
             </p>
           )}
           {e.wish?.granted ? (

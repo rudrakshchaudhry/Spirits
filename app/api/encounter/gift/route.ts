@@ -32,22 +32,22 @@ export async function POST(req: Request) {
   // A revisit wish (spec §8.4): granting it is a bonus star + companion XP, no trust needed.
   const bonus = friend.bonus_wish as { keepsake_type: string; theme: string } | null;
   if (!wished && bonus && type === bonus.keepsake_type) {
-    const { data: consumed, error } = await sb.rpc("consume_keepsake", { p_player: player.id, p_type: type });
+    // atomic: row lock → still wished? → consume → clear + count (no double spend on double-click)
+    const { data: result, error } = await sb.rpc("grant_bonus_wish", { p_player: player.id, p_spirit: claims.s, p_type: type });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!consumed) return NextResponse.json({ error: `you don't have a ${k.label}` }, { status: 400 });
-    await sb
-      .from("friendships")
-      .update({ bonus_wish: null, bonus_wishes_granted: (friend.bonus_wishes_granted ?? 0) + 1, last_visit_at: new Date().toISOString() })
-      .eq("player_id", player.id)
-      .eq("spirit_id", claims.s);
+    if (result === "missing") return NextResponse.json({ error: `you don't have a ${k.label}` }, { status: 400 });
+    if (result !== "ok") return NextResponse.json({ error: "that wish was already granted" }, { status: 409 });
     return NextResponse.json({
       outcome: "bonus",
       trust: friend.trust,
       befriended: true,
+      rare: friend.status === "rare",
       line: `${card.name} lights up. "A ${k.label}! You remembered my new wish." ✦ A new star shines in your Atlas.`,
     });
   }
-  const sameTheme = !wished && keepsake(type).theme === keepsake(card.wish.keepsake_type).theme;
+  // Once the first wish is granted, "close to the wish" means close to the open bonus wish (if any).
+  const target = friend.wish_fulfilled_at ? bonus?.keepsake_type ?? null : card.wish.keepsake_type;
+  const sameTheme = !wished && !!target && keepsake(type).theme === keepsake(target).theme;
 
   if (!wished && !sameTheme) {
     return NextResponse.json({
