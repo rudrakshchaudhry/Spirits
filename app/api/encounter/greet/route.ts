@@ -8,6 +8,18 @@ import { getCachedCard } from "@/lib/spirits/card";
  * hasn't arrived after 2.5 s (or on any error).
  */
 const FIRST_TOKEN_MS = 2500;
+const GREET_FRESH_MS = 2 * 60_000;
+const GREETS_PER_MIN = 6;
+const recent = new Map<string, number[]>();
+
+function allowGreet(playerId: string, now = Date.now()) {
+  const hits = (recent.get(playerId) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= GREETS_PER_MIN) return false;
+  hits.push(now);
+  recent.set(playerId, hits);
+  if (recent.size > 5000) for (const [k, v] of recent) if (!v.some((t) => now - t < 60_000)) recent.delete(k);
+  return true;
+}
 
 function sfMoment() {
   const h = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hour12: false }).format(new Date()));
@@ -23,16 +35,28 @@ export async function GET(req: Request) {
 
   const fallback = card.greeting;
   const encoder = new TextEncoder();
+  // Live greetings cost a model call: only for fresh tokens, and a few per player per minute.
+  // (Best-effort per instance; anything over the limit gets the cached greeting.)
+  const live = Date.now() - claims.t0 < GREET_FRESH_MS && allowGreet(claims.u);
+  let done = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let sentAny = false;
-      const timer = setTimeout(() => {
-        if (!sentAny) {
-          sentAny = true;
-          controller.enqueue(encoder.encode(fallback));
+      const finish = (text?: string) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try {
+          if (text) controller.enqueue(encoder.encode(text));
           controller.close();
+        } catch {
+          /* client went away */
         }
+      };
+      const timer = setTimeout(() => {
+        if (!sentAny) finish(fallback);
       }, FIRST_TOKEN_MS);
+      if (!live) return finish(fallback);
       try {
         const res = await mistral().chat.stream({
           model: MODELS.greeting,
@@ -53,26 +77,21 @@ export async function GET(req: Request) {
           ],
         });
         for await (const ev of res) {
+          if (done) break; // fallback already sent (or the client left): stop the live stream
           const piece = ev.data.choices[0]?.delta?.content;
           if (typeof piece !== "string" || !piece) continue;
-          if (!sentAny) {
-            // timer already fired → fallback was sent; drop the live stream
-            if (controller.desiredSize === null) return;
-            sentAny = true;
-            clearTimeout(timer);
-          }
+          sentAny = true;
+          clearTimeout(timer);
           controller.enqueue(encoder.encode(piece));
         }
-        clearTimeout(timer);
-        if (sentAny) controller.close();
       } catch {
-        clearTimeout(timer);
-        if (!sentAny) {
-          sentAny = true;
-          controller.enqueue(encoder.encode(fallback));
-          controller.close();
-        }
+        /* fall through */
       }
+      // an empty or failed stream still ends with the cached greeting
+      finish(sentAny ? undefined : fallback);
+    },
+    cancel() {
+      done = true;
     },
   });
   return new Response(stream, { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { devConditionsAllowed } from "@/lib/conditions/server";
 import { verifyEncounter } from "@/lib/encounter/token";
 import { getCachedCard } from "@/lib/spirits/card";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
@@ -42,7 +43,8 @@ export async function POST(req: Request) {
   if (!claimed?.length) return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
 
   const gained = Math.round(score * 60);
-  const trust = Math.min(200, claims.trust0 + gained);
+  // build on the stored trust (not the token's snapshot) so a gift given mid-encounter isn't lost
+  const trust = Math.min(200, (friend.trust ?? claims.trust0) + gained);
   const befriended = trust >= 100;
   const now = new Date();
   await sb
@@ -61,8 +63,10 @@ export async function POST(req: Request) {
     const card = await getCachedCard(claims.s);
     return NextResponse.json({ trust, gained, befriended: true, lore: card?.lore[0] ?? null });
   }
-  // Demo mode (?dev=1) shortens the wander-off so a stage demo can retry.
-  const ms = body.demo ? 20_000 : (friend.rarity === "legendary" ? 30 : 10) * 60_000;
+  // Demo mode shortens the wander-off so a stage demo can retry — only on dev/demo builds or for
+  // players who turned demo mode on in their profile (the client flag alone isn't trusted).
+  const demo = !!body.demo && (devConditionsAllowed() || (await sb.from("profiles").select("demo_mode").eq("id", player.id).maybeSingle()).data?.demo_mode === true);
+  const ms = demo ? 20_000 : (friend.rarity === "legendary" ? 30 : 10) * 60_000;
   const until = new Date(now.getTime() + ms).toISOString();
   await sb.from("encounter_cooldowns").upsert({ player_id: player.id, spirit_id: claims.s, until });
   return NextResponse.json({ trust, gained, befriended: false, wanderedUntil: until });
