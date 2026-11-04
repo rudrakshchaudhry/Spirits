@@ -30,6 +30,8 @@ export type SpiritLook = {
   seed: number;
   /** species group (tree) or business category (shopkeeper) */
   look?: string;
+  /** condition variant (spec §7.4: "an aura for condition variants") */
+  variant?: "night" | "fog" | "rain" | "blossom" | null;
 };
 
 type Parts = { eyes: number; mouth: number; cheeks: boolean; variant: number };
@@ -43,7 +45,7 @@ const partsFor = (seed: number): Parts => ({
 /** Texture key + ensure it exists. Animation key is `${key}:idle`. */
 export function spiritTexture(scene: Phaser.Scene, s: SpiritLook): string {
   const p = partsFor(s.seed);
-  const key = `sp:${s.family}:${s.look ?? "-"}:${s.rarity}:${p.eyes}${p.mouth}${p.cheeks ? 1 : 0}${p.variant}`;
+  const key = `sp:${s.family}:${s.look ?? "-"}:${s.rarity}:${p.eyes}${p.mouth}${p.cheeks ? 1 : 0}${p.variant}:${s.variant ?? "-"}`;
   if (scene.textures.exists(key)) return key;
 
   const W = SPIRIT_PX, H = SPIRIT_PX;
@@ -247,6 +249,26 @@ function drawSpirit(ctx: CanvasRenderingContext2D, s: SpiritLook, p: Parts, fram
   if (p.mouth === 1) { px(cx - 1, ey + 3, ink, 1, 3, 1); px(cx - 2, ey + 2, ink); px(cx + 2, ey + 2, ink); }
   else if (p.mouth === 2) px(cx, ey + 3, ink, 1, 1, 1);
   if (p.cheeks && s.family !== "guardian") { px(cx - 5, ey + 2, [240, 120, 130], 0.8, 2, 1); px(cx + 4, ey + 2, [240, 120, 130], 0.8, 2, 1); }
+
+  // ── condition variant aura ──
+  switch (s.variant) {
+    case "night": {
+      // little moon + stars
+      disc(4, 4 + bob, 3, [250, 236, 170]);
+      px(3, 3 + bob, [214, 196, 130]); px(5, 5 + bob, [214, 196, 130]);
+      px(19, 3, [255, 255, 255]); px(21, 9, [220, 220, 255]); px(2, 12, [220, 220, 255]);
+      break;
+    }
+    case "fog":
+      for (let i = 0; i < 3; i++) px(2 + ((frame + i * 3) % 6), 15 + i * 2 + bob, [230, 236, 244], 0.55, 14, 1);
+      break;
+    case "rain":
+      for (let i = 0; i < 5; i++) px((i * 5 + frame * 2) % 22 + 1, (i * 7 + frame * 3) % 12 + 1, [140, 190, 250], 0.9, 1, 2);
+      break;
+    case "blossom":
+      for (let i = 0; i < 5; i++) px((i * 7 + frame) % 20 + 2, (i * 5 + frame * 2) % 14 + 2, [250, 180, 210], 1, 2, 1);
+      break;
+  }
 
   // ── sparkle for rare+ ──
   if (s.rarity === "rare" || s.rarity === "legendary") {

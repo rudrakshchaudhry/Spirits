@@ -9,7 +9,9 @@ const MAP_W = 3520, MAP_H = 3529; // world tiles (matches public/minimap.png ext
  * glow on neighbourhoods where an open wish can be granted. Never shows the
  * exact position of anything undiscovered.
  */
-export default function AtlasMap({ explored, glow }: { explored: Record<string, number>; glow: string[] }) {
+export default function AtlasMap({ explored, glow, featured, haze }: {
+  explored: Record<string, number>; glow: string[]; featured?: string | null; haze?: Record<string, { score: number; prev: number | null }>;
+}) {
   const [hoods, setHoods] = useState<Hood[] | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   useEffect(() => {
@@ -35,10 +37,19 @@ export default function AtlasMap({ explored, glow }: { explored: Record<string, 
                   d={d}
                   fillRule="evenodd"
                   fill={`rgba(10,16,30,${fog})`}
-                  stroke={glowSet.has(h.name) ? "#fcd34d" : "rgba(255,255,255,0.25)"}
-                  strokeWidth={glowSet.has(h.name) ? 18 : 5}
-                  className={glowSet.has(h.name) ? "animate-pulse motion-reduce:animate-none" : ""}
-                  onMouseEnter={() => setHover(`${h.name} · ${pct}% explored${glowSet.has(h.name) ? " · a wish glows here" : ""}`)}
+                  stroke={glowSet.has(h.name) ? "#fcd34d" : featured === h.name ? "#f0abfc" : "rgba(255,255,255,0.25)"}
+                  strokeWidth={glowSet.has(h.name) || featured === h.name ? 18 : 5}
+                  className={glowSet.has(h.name) || featured === h.name ? "animate-pulse motion-reduce:animate-none" : ""}
+                  onMouseEnter={() => {
+                    const hz = haze?.[h.name];
+                    const lifting = hz && hz.prev !== null && hz.score < hz.prev - 0.05;
+                    setHover(
+                      `${h.name} · ${pct}% explored` +
+                        (glowSet.has(h.name) ? " · a wish glows here" : "") +
+                        (featured === h.name ? " · ★ today's featured spirit is here" : "") +
+                        (lifting ? " · the haze is lifting" : ""),
+                    );
+                  }}
                   onMouseLeave={() => setHover(null)}
                 />
               );

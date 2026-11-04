@@ -15,6 +15,17 @@ export class EntityStore {
   private waiting = new Map<string, { resolve: (c: WorldChunk) => void; reject: (e: unknown) => void }[]>();
   private queued = new Set<string>();
   private scheduled = false;
+  /** dev-forced condition key ("" = clear) or null for live */
+  private forced: string | null = null;
+  /** live condition key, used only to bust HTTP caches when the weather changes */
+  private live = "";
+
+  /** Conditions changed: drop the cache (which spirits exist depends on them). */
+  setConditions(forced: string | null, liveKey: string) {
+    this.forced = forced;
+    this.live = liveKey;
+    this.cache.clear();
+  }
 
   get(key: string): WorldChunk | undefined {
     const c = this.cache.get(key);
@@ -47,7 +58,8 @@ export class EntityStore {
     const date = sfDate();
     const win = windowIndex();
     try {
-      const res = await fetch(`/api/world?chunks=${keys.join(",")}&date=${date}&w=${win}`);
+      const cond = this.forced !== null ? `&cond=${encodeURIComponent(this.forced)}` : `&ck=${encodeURIComponent(this.live)}`;
+      const res = await fetch(`/api/world?chunks=${keys.join(",")}&date=${date}&w=${win}${cond}`);
       if (!res.ok) throw new Error(`world ${res.status}`);
       const body = (await res.json()) as WorldResponse;
       for (const c of body.chunks) {

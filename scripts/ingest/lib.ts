@@ -29,7 +29,7 @@ const UA = "sf-spirits-ingest/0.1";
 /** Page through a SODA dataset. `where`/`select` are SoQL. */
 export async function* soda<T = Record<string, string>>(
   id: string,
-  opts: { where?: string; select?: string; order?: string; pageSize?: number } = {},
+  opts: { where?: string; select?: string; order?: string; group?: string; pageSize?: number } = {},
 ): AsyncGenerator<T[]> {
   const pageSize = opts.pageSize ?? 20_000;
   for (let offset = 0; ; offset += pageSize) {
@@ -37,6 +37,7 @@ export async function* soda<T = Record<string, string>>(
     if (opts.where) u.searchParams.set("$where", opts.where);
     if (opts.select) u.searchParams.set("$select", opts.select);
     u.searchParams.set("$order", opts.order ?? ":id");
+    if (opts.group) u.searchParams.set("$group", opts.group);
     u.searchParams.set("$limit", String(pageSize));
     u.searchParams.set("$offset", String(offset));
     const headers: Record<string, string> = { "User-Agent": UA };

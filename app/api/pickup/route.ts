@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { condKey, conditionKeepsakes } from "@/lib/conditions/rules";
+import { tagsFor } from "@/lib/conditions/server";
 import { MAX_STACK } from "@/lib/keepsakes/catalog";
 import { glintsForChunk, parseGlintId, windowIndex, windowStart } from "@/lib/keepsakes/glints";
 import { openWishTypes } from "@/lib/keepsakes/server";
@@ -14,15 +16,16 @@ import { chunkEntities } from "@/lib/world/query";
 export async function POST(req: Request) {
   const player = await playerFrom(req);
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
-  const { glintId } = (await req.json().catch(() => ({}))) as { glintId?: string };
+  const { glintId, cond: forced } = (await req.json().catch(() => ({}))) as { glintId?: string; cond?: string };
   const parsed = glintId ? parseGlintId(glintId) : null;
   if (!parsed) return NextResponse.json({ error: "bad glint" }, { status: 400 });
   // current window, or the previous one (grace for players standing on it at the turnover)
   const now = windowIndex();
   if (parsed.win !== now && parsed.win !== now - 1) return NextResponse.json({ error: "that glint has faded" }, { status: 410 });
 
-  const chunk = await chunkEntities(parsed.key, sfDate());
-  const glint = glintsForChunk(parsed.key, chunk.entities, parsed.win).find((g) => g.id === glintId);
+  const { tags, cond } = await tagsFor(forced ?? null);
+  const chunk = await chunkEntities(parsed.key, sfDate(), condKey(tags));
+  const glint = glintsForChunk(parsed.key, chunk.entities, parsed.win, { extra: conditionKeepsakes(tags, cond.phase) }).find((g) => g.id === glintId);
   if (!glint) return NextResponse.json({ error: "nothing here" }, { status: 404 });
 
   const sb = supabaseAdmin();

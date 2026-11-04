@@ -106,7 +106,12 @@ export default function Atlas() {
               {data && tab === "Wishes" && <Wishes entries={[...data.met, ...data.friends].filter((e) => e.wish?.riddles.length)} />}
               {data && tab === "Keepsakes" && <Keepsakes items={data.inventory} />}
               {data && tab === "Map" && (
-                <AtlasMap explored={data.explored} glow={[...new Set([...data.met, ...data.friends].flatMap((e) => e.wish?.glowHoods ?? []))]} />
+                <AtlasMap
+                  explored={data.explored}
+                  glow={[...new Set([...data.met, ...data.friends].flatMap((e) => e.wish?.glowHoods ?? []))]}
+                  featured={useGame.getState().conditions?.featured?.neighborhood ?? null}
+                  haze={useGame.getState().conditions?.haze}
+                />
               )}
             </div>
           </div>

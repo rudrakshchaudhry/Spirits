@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { gameFor, minDurationMs } from "@/lib/encounter/games";
 import { signEncounter } from "@/lib/encounter/token";
 import { START_TRUST, getOrCreateCard, getPlace } from "@/lib/spirits/card";
-import { sfDate, spawnFor } from "@/lib/spirits/spawn";
+import type { ConditionTag } from "@/lib/conditions/rules";
+import { tagsFor } from "@/lib/conditions/server";
+import { conditionSpawn, sfDate, spawnFor } from "@/lib/spirits/spawn";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
+import { featuredDay, featuredFor } from "@/lib/world/featured";
 
 /**
  * POST /api/encounter/start { placeId }
@@ -12,13 +15,20 @@ import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 export async function POST(req: Request) {
   const player = await playerFrom(req);
   if (!player) return NextResponse.json({ error: "sign in first" }, { status: 401 });
-  const { placeId } = (await req.json().catch(() => ({}))) as { placeId?: string };
+  const { placeId, variant, cond: forced } = (await req.json().catch(() => ({}))) as { placeId?: string; variant?: ConditionTag; cond?: string };
   if (!placeId || typeof placeId !== "string") return NextResponse.json({ error: "placeId required" }, { status: 400 });
 
   const place = await getPlace(placeId);
   if (!place) return NextResponse.json({ error: "unknown place" }, { status: 404 });
-  const spawn = spawnFor({ id: place.id, kind: place.kind, rank: place.rank, tags: place.tags, openedAt: place.attrs.opened_at as string | undefined }, sfDate());
-  if (!spawn) return NextResponse.json({ error: "no spirit here today" }, { status: 404 });
+  const input = {
+    id: place.id, kind: place.kind, rank: place.rank, tags: place.tags, openedAt: place.attrs.opened_at as string | undefined,
+    foggy: place.tags.includes("coastal") || place.location.lon < -122.465,
+  };
+  // A condition spirit only exists while its condition is active (spec §7.2).
+  const spawn = variant
+    ? (await tagsFor(forced ?? null).then(({ tags }) => conditionSpawn(input, sfDate(), tags)))
+    : spawnFor(input, sfDate());
+  if (!spawn || (variant && spawn.variant !== variant)) return NextResponse.json({ error: variant ? "that spirit has faded with the weather" : "no spirit here today" }, { status: 404 });
 
   const sb = supabaseAdmin();
   const [{ data: cd }, { data: friend }] = await Promise.all([
@@ -28,7 +38,7 @@ export async function POST(req: Request) {
 
   let card;
   try {
-    card = await getOrCreateCard(place.id);
+    card = await getOrCreateCard(place.id, undefined, { variant });
   } catch (e) {
     console.error("card failed", e);
     return NextResponse.json({ error: "the spirit is shy right now" }, { status: 503 });
@@ -43,6 +53,8 @@ export async function POST(req: Request) {
     look: card.look ?? null,
     seed: card.sprite_seed,
     model: card.model,
+    variant: card.variant ?? null,
+    featured: !variant && (await featuredFor(featuredDay()).catch(() => null))?.placeId === place.id,
   };
   const placeOut = { id: place.id, name: place.name, kind: place.kind, neighborhood: place.neighborhood };
 

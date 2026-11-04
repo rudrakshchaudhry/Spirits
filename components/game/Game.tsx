@@ -1,6 +1,8 @@
 "use client";
 import dynamic from "next/dynamic";
 import Atlas from "@/components/atlas/Atlas";
+import DevPanel from "@/components/hud/DevPanel";
+import WorldConditions from "@/components/hud/WorldConditions";
 import EncounterDialog from "@/components/encounter/EncounterDialog";
 import InteractPrompt from "@/components/hud/InteractPrompt";
 import Joystick from "@/components/hud/Joystick";
@@ -15,12 +17,14 @@ export default function Game() {
   return (
     <main className="relative h-dvh w-full touch-none select-none overflow-hidden bg-[#2e5c8a]">
       <GameCanvas />
+      <WorldConditions />
       <TitleCard />
       <Minimap />
       <StatusBar />
       <Joystick />
       <InteractPrompt />
       <Atlas />
+      <DevPanel />
       <EncounterDialog />
     </main>
   );

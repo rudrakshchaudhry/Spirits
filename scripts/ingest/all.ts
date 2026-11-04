@@ -8,12 +8,13 @@ import { es, INDEX } from "../../lib/es/client";
 import art from "./art";
 import business from "./business";
 import film from "./film";
+import haze from "./haze";
 import landmarks from "./landmarks";
 import neighborhoods from "./neighborhoods";
 import parks from "./parks";
 import trees from "./trees";
 
-const JOBS: Record<string, () => Promise<number>> = { neighborhoods, landmarks, art, film, parks, business, trees };
+const JOBS: Record<string, () => Promise<number>> = { neighborhoods, landmarks, art, film, parks, business, trees, haze };
 
 async function main() {
   const picked = process.argv.slice(2).filter((a) => !a.startsWith("-"));

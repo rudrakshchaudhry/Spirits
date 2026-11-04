@@ -15,7 +15,16 @@ import { BUSINESS_CATEGORIES, EXCLUSIVE_KEEPSAKES, SPECIES_GROUPS } from "@/lib/
 export function exclusiveHoods(type: string): string[] {
   return Object.entries(EXCLUSIVE_KEEPSAKES).filter(([, ks]) => ks.includes(type)).map(([h]) => h);
 }
+import type { ConditionTag } from "@/lib/conditions/rules";
 import { FAMILY_OF, type PlaceKind, type Rarity, hash32, spawnFor, sfDate } from "./spawn";
+
+const VARIANT_HINT: Record<ConditionTag, string> = {
+  night: "a NIGHT spirit that only appears after dark: quiet, starlit, lantern-loving",
+  fog: "a FOG spirit that only appears when the fog rolls in: soft, drifting, misty",
+  rain: "a RAIN spirit that only appears in the rain: puddle-happy, pattering",
+  blossom: "a BLOSSOM spirit that only appears in blossom season: petal-light, springy",
+};
+const BUMP: Record<Rarity, Rarity> = { common: "uncommon", uncommon: "rare", rare: "legendary", legendary: "legendary" };
 
 export const TEMPERAMENTS = ["shy", "wary", "calm", "curious", "bold"] as const;
 export type Temperament = (typeof TEMPERAMENTS)[number];
@@ -57,6 +66,8 @@ export type SpiritCard = CardContent & {
   status: "ready";
   /** unlocked by granting the wish (generated lazily) */
   secret_lore?: string;
+  /** condition variant (night/fog/rain/blossom) */
+  variant?: ConditionTag;
 };
 
 export type PlaceSrc = {
@@ -201,10 +212,11 @@ export function templateCard(p: PlaceSrc): CardContent {
 // ───────────────────────── generation ─────────────────────────
 export type WishHint = { keepsake_type: string; theme: string };
 
-async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint): Promise<{ content: CardContent; model: string; moderation: SpiritCard["moderation"] }> {
+async function generateContent(p: PlaceSrc, rarity: Rarity, hint?: WishHint, variant?: ConditionTag): Promise<{ content: CardContent; model: string; moderation: SpiritCard["moderation"] }> {
   const near = await nearbyPlaces(p).catch(() => []);
   const user =
     prompt(p, near, rarity) +
+    (variant ? `\nVARIANT: this is ${VARIANT_HINT[variant]}. Let that shape its name and personality.` : "") +
     (hint
       ? `\nWISH_HINT: this spirit's wish must use keepsake_type "${hint.keepsake_type}" and be about "${hint.theme}".` +
         (exclusiveHoods(hint.keepsake_type).length
@@ -328,11 +340,15 @@ export async function getCachedCard(spiritId: string): Promise<SpiritCard | null
 }
 
 /** Get the spirit card for a place, generating it once citywide. */
-export function getOrCreateCard(placeId: string, date = sfDate(), opts: { redoTemplates?: boolean; wishHint?: WishHint } = {}): Promise<SpiritCard> {
-  const spiritId = `${placeId}:base`;
+export function getOrCreateCard(
+  placeId: string,
+  date = sfDate(),
+  opts: { redoTemplates?: boolean; wishHint?: WishHint; variant?: ConditionTag } = {},
+): Promise<SpiritCard> {
+  const spiritId = `${placeId}:${opts.variant ?? "base"}`;
   let p = inflight.get(spiritId);
   if (!p) {
-    p = createCard(placeId, spiritId, date, opts.redoTemplates, opts.wishHint).finally(() => inflight.delete(spiritId));
+    p = createCard(placeId, spiritId, date, opts.redoTemplates, opts.wishHint, opts.variant).finally(() => inflight.delete(spiritId));
     inflight.set(spiritId, p);
   }
   return p;
@@ -341,7 +357,9 @@ export function getOrCreateCard(placeId: string, date = sfDate(), opts: { redoTe
 /** Template fallbacks are provisional: retried once they're 15 min old (or forced by pre-warm). */
 const TEMPLATE_RETRY_MS = 15 * 60_000;
 
-async function createCard(placeId: string, spiritId: string, date: string, redoTemplates = false, wishHint?: WishHint): Promise<SpiritCard> {
+async function createCard(
+  placeId: string, spiritId: string, date: string, redoTemplates = false, wishHint?: WishHint, variant?: ConditionTag,
+): Promise<SpiritCard> {
   const cached = await getCachedCard(spiritId);
   const stale = cached?.model === "template" && (redoTemplates || Date.now() - Date.parse(cached.generated_at) > TEMPLATE_RETRY_MS);
   if (cached && !stale) return cached;
@@ -362,8 +380,8 @@ async function createCard(placeId: string, spiritId: string, date: string, redoT
   const place = await getPlace(placeId);
   if (!place) throw new Error(`unknown place ${placeId}`);
   const spawn = spawnFor({ id: place.id, kind: place.kind, rank: place.rank, tags: place.tags, openedAt: place.attrs.opened_at as string | undefined }, date);
-  const rarity: Rarity = spawn?.rarity ?? "common";
-  const { content, model, moderation } = await generateContent(place, rarity, wishHint);
+  const rarity: Rarity = variant ? BUMP[spawn?.rarity ?? "common"] : spawn?.rarity ?? "common";
+  const { content, model, moderation } = await generateContent(place, rarity, wishHint, variant);
   const links = await linkWish(place, content.wish).catch(() => ({ target_place_ids: [], target_hoods: [] }));
   const card: SpiritCard = {
     ...content,
@@ -376,7 +394,8 @@ async function createCard(placeId: string, spiritId: string, date: string, redoT
     place_name: place.name,
     neighborhood: place.neighborhood,
     look: (place.attrs.species_group ?? place.attrs.business_category) as string | undefined,
-    sprite_seed: hash32(place.id),
+    sprite_seed: variant ? hash32(spiritId) : hash32(place.id),
+    ...(variant ? { variant } : {}),
     generated_at: new Date().toISOString(),
     model,
     moderation,

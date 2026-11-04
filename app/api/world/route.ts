@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { condKey, conditionKeepsakes } from "@/lib/conditions/rules";
+import { tagsFor } from "@/lib/conditions/server";
 import { glintsForChunk, windowIndex } from "@/lib/keepsakes/glints";
 import { sfDate } from "@/lib/spirits/spawn";
 import type { WorldResponse } from "@/lib/world/entities";
@@ -24,13 +26,17 @@ export async function GET(req: NextRequest) {
     // Glints change every 2-hour window: the client puts `w` in the URL so caches key on it.
     const w = Number(sp.get("w"));
     const win = Number.isFinite(w) && Math.abs(w - windowIndex()) <= 1 ? w : windowIndex();
+    // Live conditions (or the dev panel's forced ones, when the server allows it).
+    const { tags, cond } = await tagsFor(sp.get("cond"));
+    const ck = condKey(tags);
+    const extra = conditionKeepsakes(tags, cond.phase);
     const chunks = await Promise.all(
       keys.map(async (k) => {
-        const c = await chunkEntities(k, date);
-        return { ...c, glints: glintsForChunk(k, c.entities, win) };
+        const c = await chunkEntities(k, date, ck);
+        return { ...c, glints: glintsForChunk(k, c.entities, win, { extra }) };
       }),
     );
-    const body: WorldResponse = { date, window: win, chunks };
+    const body: WorldResponse = { date, window: win, cond: ck, chunks };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, max-age=300, s-maxage=900, stale-while-revalidate=3600" },
     });

@@ -4,6 +4,8 @@
  * compute the same answer, so no spawn table is stored.
  */
 
+import type { ConditionTag } from "@/lib/conditions/rules";
+
 export type Family = "tree" | "park" | "shopkeeper" | "ancient" | "echo" | "guardian";
 export type Rarity = "common" | "uncommon" | "rare" | "legendary";
 export type PlaceKind = "tree" | "park" | "art" | "landmark" | "film" | "business";
@@ -45,6 +47,8 @@ export type SpawnInput = {
   rank: number;
   tags: string[];
   openedAt?: string;
+  /** west side of the city / on the coast (fog spirits live here) */
+  foggy?: boolean;
 };
 
 export type SpiritSpawn = {
@@ -53,7 +57,32 @@ export type SpiritSpawn = {
   rarity: Rarity;
   /** stable per place (not per day) so a spirit always looks the same */
   seed: number;
+  /** condition variant (night/fog/rain/blossom) — spec §7.1 "condition spirits" */
+  variant?: ConditionTag;
 };
+
+const BUMP: Record<Rarity, Rarity> = { common: "uncommon", uncommon: "rare", rare: "legendary", legendary: "legendary" };
+
+/**
+ * Condition spirits: a second roll, only while the condition is active and the
+ * place qualifies (flowering trees in spring → blossom; west/coast + fog → fog;
+ * any place + rain → rain; night → night). +1 rarity tier.
+ */
+export function conditionSpawn(p: SpawnInput, date: string, tags: ConditionTag[]): SpiritSpawn | null {
+  const base = spawnFor(p, date) ?? { rarity: "common" as Rarity };
+  const order: [ConditionTag, number, boolean][] = [
+    ["blossom", 0.3, p.kind === "tree" && p.tags.includes("flowering")],
+    ["fog", 0.06, !!p.foggy],
+    ["rain", 0.015, true],
+    ["night", 0.015, true],
+  ];
+  for (const [tag, chance, ok] of order) {
+    if (!ok || !tags.includes(tag)) continue;
+    if (roll(`${p.id}|${date}|${tag}`) >= chance) continue;
+    return { id: `${p.id}:${tag}`, family: FAMILY_OF[p.kind], rarity: BUMP[base.rarity], seed: hash32(`${p.id}:${tag}`), variant: tag };
+  }
+  return null;
+}
 
 const DAY = 86_400_000;
 

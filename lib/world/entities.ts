@@ -16,9 +16,13 @@ export type Entity = {
   /** keepsake types this place yields (glint typing) */
   ks?: string[];
   spirit?: SpiritSpawn;
+  /** condition spirit (night/fog/rain/blossom variant) */
+  cspirit?: SpiritSpawn;
+  /** opened in the last 14 days ("grand opening") */
+  fresh?: 1;
 };
 
 export type ChunkEntities = { key: string; date: string; entities: Entity[] };
 
 export type WorldChunk = ChunkEntities & { glints: Glint[] };
-export type WorldResponse = { date: string; window: number; chunks: WorldChunk[] };
+export type WorldResponse = { date: string; window: number; cond: string; chunks: WorldChunk[] };
