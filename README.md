@@ -6,10 +6,26 @@ written from the real record, and befriend them. Spec: `.plans/sf-spirits-spec.m
 
 ## Run
 ```bash
-npm install
+nvm use                # Node 22 (.nvmrc); any Node >= 20.9 works
+cp .env.example .env.local   # then fill in the keys (see below)
+npm ci
 npm run dev            # http://localhost:3000
-npm test               # unit tests (vitest)
+npm run check          # lint + typecheck + unit tests (vitest)
 ```
+Or with Docker (no local Node needed): `npm run docker:up` builds the production image and starts the app on
+:3000 plus a cron sidecar. See [docs/DEPLOY.md](docs/DEPLOY.md#7-option-b-docker--self-hosting).
+
+### Setting up on a new machine
+The game needs three hosted services; nothing runs locally except the Next.js app.
+| Service | What it holds | First-time setup |
+|---|---|---|
+| **Elasticsearch** (Elastic Cloud, 9.x) | places, spirit cards, neighbourhoods, gatherings | `npm run es:setup && npm run ingest`, then the scripts in [DEPLOY §5](docs/DEPLOY.md#5-data-one-time-from-your-machine) |
+| **Supabase** | player state (friendships, keepsakes, trades, crews) | apply `supabase/migrations/*.sql` in filename order ([DEPLOY §4](docs/DEPLOY.md#4-supabase-settings)) |
+| **Mistral** | spirit cards, greetings, embeddings, moderation | just the API key |
+
+If you're reusing the existing Elastic and Supabase projects, only `.env.local` is needed: copy it securely from the
+old machine (it is git-ignored and must never be committed). The terrain (`public/chunks`, `public/minimap.png`) is
+committed, so `npm run fetch:terrain && npm run bake` is only needed to rebuild the map.
 URL flags: `?dev=1` (coordinates, dev conditions panel, click-the-map teleport), `?at=lat,lon`, `?noclip=1`.
 
 **Controls:** WASD / arrows (Shift jogs) · **E / Space / click** meet a spirit · **B** Spirit Atlas · **T** Town · **M** city map.

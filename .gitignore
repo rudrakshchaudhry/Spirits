@@ -9,3 +9,6 @@ node_modules/
 # terrain bake sources
 data/raw/
 *.tsbuildinfo
+
+# local agent/editor settings
+.claude/
