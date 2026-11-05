@@ -11,9 +11,6 @@ short game written from the real record, and befriend them.
   <img src="docs/demo-shots/3-meet-dialog.png" alt="Meeting a spirit" width="49%">
 </p>
 
-**Status (2026-11-04):** feature-complete for the spec (checkpoints A–H), reviewed, and paused. What's left needs a
-person: see [Open items](#open-items).
-
 ## Contents
 - [What's in the game](#whats-in-the-game)
 - [How it works](#how-it-works)
@@ -24,7 +21,6 @@ person: see [Open items](#open-items).
 - [Testing and CI](#testing-and-ci)
 - [Deploying](#deploying)
 - [Privacy and data accuracy](#privacy-and-data-accuracy)
-- [Open items](#open-items)
 
 ## What's in the game
 - **The city:** OpenStreetMap terrain baked into 2,098 chunks of 4 m tiles; 41 neighbourhoods with title cards.
@@ -170,11 +166,3 @@ Demo script: [docs/DEMO.md](docs/DEMO.md). Pitch: [PITCH_NOTES.md](PITCH_NOTES.m
   generic menus, not claims about a real business.
 - **Text is moderated:** model output (cards, riddles) and player handles go through Mistral moderation.
 - **Accounts:** guest accounts are rate-limited per salted IP hash.
-
-## Open items
-These need the project owner; the full list is in
-[.plans/long-term-progress.md](.plans/long-term-progress.md#wrap-up-status-2026-11-04):
-1. Rotate the Supabase secret key, then update `.env.local` and the deploy env vars.
-2. Deploy, on Vercel or with Docker.
-3. In Supabase Auth, turn on leaked-password protection.
-4. Choose a license. There is none yet, so the code is "all rights reserved" by default.

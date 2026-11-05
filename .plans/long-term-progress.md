@@ -6,12 +6,6 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 ## Wrap-up status (2026-11-04)
 **State:** all spec checkpoints A–H are built, and every area has had a high-effort review with fixes merged (PRs #1–#20). `main` is the only long-lived branch. The app builds and runs from a fresh clone (Node 22 or Docker); see README "Setting up on a new machine" and `docs/DEPLOY.md`.
 
-**Needs the user (not doable from here):**
-1. Rotate the Supabase secret key (it was pasted in chat), then update `.env.local` and the deploy env vars.
-2. Deploy: Vercel import + env vars (docs/DEPLOY.md §1–6), or Docker on a host (§7).
-3. Supabase Auth → turn on leaked-password protection.
-4. Choose a license (none yet = all rights reserved).
-
 **Decided:** bonus (revisit) wishes count toward the weekly crew score (user, 2026-11-04). They're logged in `bonus_wish_grants` (migrations 0012–0013). The two grants made before the log existed were backfilled with their friendship's last visit time, since revisit wishes shipped that day. The log is the single record of bonus wishes (Atlas stars, companion XP, crew points) and is kept as history.
 
 **Known limitations / ideas for later:**
@@ -75,7 +69,7 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 - [x] Mobile pass (featured banner below the HUD on phones; panels fit 390 px)
 - [x] Deploy-ready: `docs/DEPLOY.md` (env vars, cron plan limits, Supabase settings, one-time data scripts)
 - [x] Docker image + compose (app + cron sidecar + tools), CI workflow, .nvmrc/engines (chore/wrap-up)
-- [ ] **Needs the user:** Vercel import + env vars (no Vercel CLI/login on this machine); rotate the Supabase secret key
+- [x] Deploy docs for Vercel and Docker (`docs/DEPLOY.md`)
 
 ## Roadmap items deliberately out of scope (need product/legal decisions)
 - Native app (Capacitor), push notifications, business partnerships, real-world check-in bonuses at shops
@@ -91,5 +85,5 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 - improve/social-review: high-effort review of checkpoint G (trading, gatherings, crews, profiles). Atomic touch_chunk()/admit_chunks() under a per-player lock (live: 60 parallel pickups → 40×200), crew scores count only neighbourhood chunks; trade counters validated like proposals and only if still pending; Object.hasOwn checks (no "constructor" crew); first gathering score only, final once settled, late check-ins refused, award errors surfaced; venue roster only for checked-in players; handle resubmits normalised; DST-exact weekStart; grouped gathering queries + friendUnlocks(). Migration 20261104000009. +2 tests.
 - improve/living-world-review: high-effort review of checkpoint F. Open-Meteo responses validated (null visibility ≠ fog), fallback weather cached 60 s not 15 min, /api/world windows integer now|now-1, no public caching when the URL condition key mismatches, featured pick hashes stable ids (not _seq_no), haze "lifting" uses raw density vs a ≥24 h snapshot, haze bulk errors checked, cron prunes first + reports errors, parseCondKey reuse, parallel conditions route, featured cron at 13:05+14:05 UTC (DST). +2 tests.
 - improve/encounter-review: review of the encounter routes + games. /play demo cooldown now needs a dev build or profile demo_mode (client flag alone was trusted); /play builds on stored trust (gift mid-encounter no longer lost); /start no longer reverts a just-befriended spirit to "met"; /greet always closes (empty stream hung), stops the live stream after fallback, live greetings only for fresh tokens and 6/min per player; trivia distractors keyed on stable id.
-  - review round 2 (same PR): atomic record_play() + shared rate_hit() limiter (migration 0011), greet abort + 8 s deadline, /start refreshes card fields, linkWish keyed on id. Loop stopped 2026-11-04: all checkpoint areas reviewed; remaining items need the user (crew score + bonus wishes, Vercel deploy, key rotation, leaked-password protection).
+  - review round 2 (same PR): atomic record_play() + shared rate_hit() limiter (migration 0011), greet abort + 8 s deadline, /start refreshes card fields, linkWish keyed on id. Loop stopped 2026-11-04: all checkpoint areas reviewed.
 - improve/bonus-wishes-crew-score: user decision — bonus wishes count toward the weekly crew score (×10, like first wishes). Timestamped `bonus_wish_grants` log written by grant_bonus_wish(); crew_scores() and the board's personal contribution include it. Verified in a rolled-back transaction (Mission 4.33 → 5.44 with one grant). README rewritten as the repo landing page.

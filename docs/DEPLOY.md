@@ -19,7 +19,7 @@ The repo is deploy-ready. These steps need your Vercel account, so they weren't 
 | `MISTRAL_API_KEY` | Mistral key | |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://wyaubwtauvlvvsprkqbw.supabase.co` | |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | publishable key | |
-| `SUPABASE_SERVICE_ROLE_KEY` | **a newly rotated secret key** | the old one was pasted in chat; rotate it first |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase secret key | server-only; never expose it to the browser |
 | `ENCOUNTER_SECRET` | `openssl rand -hex 32` | signs encounter tokens |
 | `CRON_SECRET` | `openssl rand -hex 24` | Vercel sends it to the cron routes |
 | `SOCRATA_APP_TOKEN` | optional | only used by ingest crons |
