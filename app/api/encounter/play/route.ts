@@ -1,4 +1,6 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
+import { CREW_BOARD_TAG } from "@/lib/social/board";
 import { devConditionsAllowed } from "@/lib/conditions/server";
 import { verifyEncounter } from "@/lib/encounter/token";
 import { getCachedCard } from "@/lib/spirits/card";
@@ -41,6 +43,7 @@ export async function POST(req: Request) {
   if (r.result === "used") return NextResponse.json({ error: "this encounter is over — meet the spirit again" }, { status: 409 });
   if (r.result !== "ok") return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
   if (r.befriended) {
+    revalidateTag(CREW_BOARD_TAG, "max");
     const card = await getCachedCard(claims.s);
     return NextResponse.json({ trust: r.trust, gained, befriended: true, lore: card?.lore[0] ?? null });
   }

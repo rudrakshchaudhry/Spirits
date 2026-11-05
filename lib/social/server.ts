@@ -8,19 +8,19 @@ const EXPLORED_CHUNKS = 3;
 
 export async function statsFor(playerId: string): Promise<Stats> {
   const sb = supabaseAdmin();
-  const [{ data: chunks }, { count: friends }, { count: wishes }, { data: bonus }] = await Promise.all([
+  const [{ data: chunks }, { count: friends }, { count: wishes }, { count: bonusWishes }] = await Promise.all([
     sb.from("explored_chunks").select("neighborhood").eq("player_id", playerId),
     sb.from("friendships").select("*", { count: "exact", head: true }).eq("player_id", playerId).neq("status", "met"),
     sb.from("friendships").select("*", { count: "exact", head: true }).eq("player_id", playerId).not("wish_fulfilled_at", "is", null),
-    sb.from("friendships").select("bonus_wishes_granted").eq("player_id", playerId).gt("bonus_wishes_granted", 0),
+    // the grant log is the single record of bonus wishes (also used by crew points)
+    sb.from("bonus_wish_grants").select("*", { count: "exact", head: true }).eq("player_id", playerId),
   ]);
-  const bonusWishes = (bonus ?? []).reduce((a, r) => a + (r.bonus_wishes_granted ?? 0), 0);
   const per: Record<string, number> = {};
   for (const c of chunks ?? []) if (c.neighborhood) per[c.neighborhood] = (per[c.neighborhood] ?? 0) + 1;
   const ranked = Object.entries(per).sort((a, b) => b[1] - a[1]);
   return {
     friends: friends ?? 0,
-    wishes: (wishes ?? 0) + bonusWishes, // revisit wishes count as Atlas stars + companion XP
+    wishes: (wishes ?? 0) + (bonusWishes ?? 0), // revisit wishes count as Atlas stars + companion XP
     hoods: ranked.filter(([, n]) => n >= EXPLORED_CHUNKS).length,
     topHoods: ranked.slice(0, 2).map(([h]) => h),
   };
