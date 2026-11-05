@@ -15,3 +15,6 @@ data/raw/
 
 # managed by Next.js (flips between dev and build); recreated by next dev/build/typegen
 next-env.d.ts
+
+# private notes (never committed)
+*.local.md
