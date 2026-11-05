@@ -1,4 +1,6 @@
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
+import { CREW_BOARD_TAG } from "@/lib/social/board";
 import { keepsake, withArticle } from "@/lib/keepsakes/catalog";
 import { verifyEncounter } from "@/lib/encounter/token";
 import { getCachedCard, secretChapter } from "@/lib/spirits/card";
@@ -37,6 +39,7 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (result === "missing") return NextResponse.json({ error: `you don't have ${withArticle(k.label)}` }, { status: 400 });
     if (result !== "ok") return NextResponse.json({ error: "that wish was already granted" }, { status: 409 });
+    revalidateTag(CREW_BOARD_TAG, "max");
     return NextResponse.json({
       outcome: "bonus",
       trust: friend.trust,
@@ -67,6 +70,7 @@ export async function POST(req: Request) {
   if (r.result === "already") return NextResponse.json({ error: "that wish was already granted" }, { status: 409 });
   if (r.result !== "ok") return NextResponse.json({ error: "meet the spirit first" }, { status: 400 });
   const trust = r.trust!, status = r.status!;
+  if (wished || (status !== "met" && friend.status === "met")) revalidateTag(CREW_BOARD_TAG, "max");
   if (status !== "met") await sb.from("encounter_cooldowns").delete().eq("player_id", player.id).eq("spirit_id", claims.s);
 
   const secret = wished ? await secretChapter(card) : null;

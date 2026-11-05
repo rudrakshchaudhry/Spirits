@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { minDurationMs } from "@/lib/encounter/games";
+import { revalidateTag } from "next/cache";
+import { CREW_BOARD_TAG } from "@/lib/social/board";
 import { COOP_PASS, awardGathering, coopGame, gatheringById, isActive } from "@/lib/social/gatherings";
 import { playerFrom, supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -32,6 +34,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/gatherings/[id]
   // success: befriend everyone present (idempotent — the room GET retries it if this fails)
   try {
     const card = await awardGathering(e);
+    revalidateTag(CREW_BOARD_TAG, "max");
     return NextResponse.json({ result: "success", played: r.played, teamScore, spirit: card?.name, lore: card?.lore[0] });
   } catch {
     return NextResponse.json({ result: "success", played: r.played, teamScore, pendingAward: true });

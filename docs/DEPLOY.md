@@ -34,7 +34,7 @@ The repo is deploy-ready. These steps need your Vercel account, so they weren't 
 The new-business cron runs up to ~20 s. Its `maxDuration` is 300, which needs Pro; on Hobby the limit is 60 s, which is still enough.
 
 ## 4. Supabase settings
-- **New Supabase project:** apply every file in `supabase/migrations/` in filename order, either in the SQL editor or with the Supabase CLI (`supabase link --project-ref <ref>` then `supabase db push`). The existing project `wyaubwtauvlvvsprkqbw` already has all of them, up to `20261104000012`.
+- **New Supabase project:** apply every file in `supabase/migrations/` in filename order, either in the SQL editor or with the Supabase CLI (`supabase link --project-ref <ref>` then `supabase db push`). The existing project `wyaubwtauvlvvsprkqbw` already has all of them, up to `20261104000013`.
 - Auth → Providers: keep **Email**. Guests are created server-side by `/api/guest`, so Anonymous sign-ins can stay off.
 - Auth → Settings: turn on **Leaked password protection** (the security advisor flags it).
 - Realtime is used for gathering lobbies (presence only, no tables). It's on by default.

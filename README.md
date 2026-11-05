@@ -80,7 +80,8 @@ Data ingest (scripts/ingest): DataSF → Elasticsearch
   Every client sees the same city without the server storing it.
 - **Server authority:** encounter tokens are HMAC-signed and single-use. Gifts, pickups, trades, plays and gathering
   results go through row-locked Postgres functions, so double clicks and replays can't duplicate anything.
-- **Caching:** `'use cache'` with `cacheLife`/`cacheTag` for conditions, world chunks, featured and the crew board.
+- **Caching:** `'use cache'` with `cacheLife` for conditions, world chunks, featured and the crew board. World
+  chunks are tagged by date, and the crew board is tagged and refreshed when a friend or wish is recorded.
   The CDN caches `/api/world` only when the URL names the exact window, date and condition served.
 
 ## Quick start

@@ -12,7 +12,7 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 3. Supabase Auth → turn on leaked-password protection.
 4. Choose a license (none yet = all rights reserved).
 
-**Decided:** bonus (revisit) wishes count toward the weekly crew score (user, 2026-11-04). They're logged in `bonus_wish_grants` (migration 0012); earlier grants have no timestamp, so they aren't backfilled.
+**Decided:** bonus (revisit) wishes count toward the weekly crew score (user, 2026-11-04). They're logged in `bonus_wish_grants` (migrations 0012–0013). The two grants made before the log existed were backfilled with their friendship's last visit time, since revisit wishes shipped that day. The log is the single record of bonus wishes (Atlas stars, companion XP, crew points) and is kept as history.
 
 **Known limitations / ideas for later:**
 - The `use cache` data cache is per instance (fine on Vercel; for multi-replica self-hosting see Next's self-hosting guide).
@@ -21,7 +21,7 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 - `rate_hits` and `guest_signups` are pruned by the hourly cron. On Vercel Hobby (daily cron) they grow for up to a day, which is harmless.
 - Roadmap items out of scope: native app, push notifications, business partnerships (see below).
 
-**Infra facts:** Supabase project `wyaubwtauvlvvsprkqbw` (migrations up to `20261104000012` applied). Elastic indices `places`, `spirits`, `neighborhoods`, `events` (`npm run es:setup` is idempotent). Secrets live only in `.env.local` (git-ignored; git history scanned clean on 2026-11-04).
+**Infra facts:** Supabase project `wyaubwtauvlvvsprkqbw` (migrations up to `20261104000013` applied). Elastic indices `places`, `spirits`, `neighborhoods`, `events` (`npm run es:setup` is idempotent). Secrets live only in `.env.local` (git-ignored; git history scanned clean on 2026-11-04).
 
 ## Done
 - [x] A: walk the city (PR #1)
