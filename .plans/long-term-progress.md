@@ -4,13 +4,15 @@ Source of truth for what's left. Spec: `.plans/sf-spirits-spec.md` (§17 checkpo
 Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) → PR into `main` → high-effort review → fixes → merge. CI (`.github/workflows/ci.yml`) must pass. Merged branches are deleted.
 
 ## Wrap-up status (2026-11-04)
-**State:** all spec checkpoints A–H are built, and every area has had a high-effort review with fixes merged (PRs #1–#17, plus this wrap-up PR). `main` is the only long-lived branch. The app builds and runs from a fresh clone (Node 22 or Docker); see README "Setting up on a new machine" and `docs/DEPLOY.md`.
+**State:** all spec checkpoints A–H are built, and every area has had a high-effort review with fixes merged (PRs #1–#20). `main` is the only long-lived branch. The app builds and runs from a fresh clone (Node 22 or Docker); see README "Setting up on a new machine" and `docs/DEPLOY.md`.
 
 **Needs the user (not doable from here):**
 1. Rotate the Supabase secret key (it was pasted in chat), then update `.env.local` and the deploy env vars.
 2. Deploy: Vercel import + env vars (docs/DEPLOY.md §1–6), or Docker on a host (§7).
 3. Supabase Auth → turn on leaked-password protection.
-4. Product decision: should bonus (revisit) wishes count toward the weekly crew score? Today they don't (`crew_scores()` counts first wishes only).
+4. Choose a license (none yet = all rights reserved).
+
+**Decided:** bonus (revisit) wishes count toward the weekly crew score (user, 2026-11-04). They're logged in `bonus_wish_grants` (migration 0012); earlier grants have no timestamp, so they aren't backfilled.
 
 **Known limitations / ideas for later:**
 - The `use cache` data cache is per instance (fine on Vercel; for multi-replica self-hosting see Next's self-hosting guide).
@@ -19,7 +21,7 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 - `rate_hits` and `guest_signups` are pruned by the hourly cron. On Vercel Hobby (daily cron) they grow for up to a day, which is harmless.
 - Roadmap items out of scope: native app, push notifications, business partnerships (see below).
 
-**Infra facts:** Supabase project `wyaubwtauvlvvsprkqbw` (migrations up to `20261104000011` applied). Elastic indices `places`, `spirits`, `neighborhoods`, `events` (`npm run es:setup` is idempotent). Secrets live only in `.env.local` (git-ignored; git history scanned clean on 2026-11-04).
+**Infra facts:** Supabase project `wyaubwtauvlvvsprkqbw` (migrations up to `20261104000012` applied). Elastic indices `places`, `spirits`, `neighborhoods`, `events` (`npm run es:setup` is idempotent). Secrets live only in `.env.local` (git-ignored; git history scanned clean on 2026-11-04).
 
 ## Done
 - [x] A: walk the city (PR #1)
@@ -90,3 +92,4 @@ Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) →
 - improve/living-world-review: high-effort review of checkpoint F. Open-Meteo responses validated (null visibility ≠ fog), fallback weather cached 60 s not 15 min, /api/world windows integer now|now-1, no public caching when the URL condition key mismatches, featured pick hashes stable ids (not _seq_no), haze "lifting" uses raw density vs a ≥24 h snapshot, haze bulk errors checked, cron prunes first + reports errors, parseCondKey reuse, parallel conditions route, featured cron at 13:05+14:05 UTC (DST). +2 tests.
 - improve/encounter-review: review of the encounter routes + games. /play demo cooldown now needs a dev build or profile demo_mode (client flag alone was trusted); /play builds on stored trust (gift mid-encounter no longer lost); /start no longer reverts a just-befriended spirit to "met"; /greet always closes (empty stream hung), stops the live stream after fallback, live greetings only for fresh tokens and 6/min per player; trivia distractors keyed on stable id.
   - review round 2 (same PR): atomic record_play() + shared rate_hit() limiter (migration 0011), greet abort + 8 s deadline, /start refreshes card fields, linkWish keyed on id. Loop stopped 2026-11-04: all checkpoint areas reviewed; remaining items need the user (crew score + bonus wishes, Vercel deploy, key rotation, leaked-password protection).
+- improve/bonus-wishes-crew-score: user decision — bonus wishes count toward the weekly crew score (×10, like first wishes). Timestamped `bonus_wish_grants` log written by grant_bonus_wish(); crew_scores() and the board's personal contribution include it. Verified in a rolled-back transaction (Mission 4.33 → 5.44 with one grant). README rewritten as the repo landing page.
