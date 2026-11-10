@@ -6,6 +6,8 @@ An open-world pixel game on the real map of San Francisco. Spirits live at real 
 street trees, local shops, film locations, public art, landmarks and parks. You walk the city, find them, play a
 short game written from the real record, and befriend them.
 
+Built for the Elastic × Mistral SF Hack Night.
+
 <p>
   <img src="docs/demo-shots/1-world-valencia.png" alt="Walking down Valencia Street" width="49%">
   <img src="docs/demo-shots/3-meet-dialog.png" alt="Meeting a spirit" width="49%">
@@ -139,8 +141,8 @@ scripts/        terrain bake, DataSF ingest, data setup, e2e checks
 supabase/       SQL migrations (apply in order)
 elastic/        Kibana Dev Tools demo queries
 public/         baked terrain chunks, minimap, neighbourhood outlines
-docs/           DEPLOY, DEMO, pitch checklist, screenshots
-.plans/         product spec and the progress tracker
+docs/           DEPLOY, DEMO, pitch notes and checklist, screenshots
+  plans/        product spec and the progress tracker
 Dockerfile, docker-compose.yml, docker/   container build and the cron sidecar
 ```
 
@@ -156,7 +158,7 @@ Dockerfile, docker-compose.yml, docker/   container build and the cron sidecar
 - **Vercel** (recommended): env vars, cron plan limits and Supabase settings.
 - **Docker / self-hosting**: the standalone image and the cron sidecar.
 
-Demo script: [docs/DEMO.md](docs/DEMO.md). Pitch: [PITCH_NOTES.md](PITCH_NOTES.md).
+Demo script: [docs/DEMO.md](docs/DEMO.md). Pitch: [docs/PITCH_NOTES.md](docs/PITCH_NOTES.md).
 
 ## Privacy and data accuracy
 - **Player location is never stored.** Exploration is reported as chunk keys (256 m squares). A gathering check-in
@@ -166,3 +168,6 @@ Demo script: [docs/DEMO.md](docs/DEMO.md). Pitch: [PITCH_NOTES.md](PITCH_NOTES.m
   generic menus, not claims about a real business.
 - **Text is moderated:** model output (cards, riddles) and player handles go through Mistral moderation.
 - **Accounts:** guest accounts are rate-limited per salted IP hash.
+
+## License
+[MIT](LICENSE)

@@ -1,6 +1,6 @@
 # Long-term build: progress tracker
 
-Source of truth for what's left. Spec: `.plans/sf-spirits-spec.md` (§17 checkpoints, §20 roadmap).
+Source of truth for what's left. Spec: `docs/plans/sf-spirits-spec.md` (§17 checkpoints, §20 roadmap).
 Git flow: short-lived branches (`checkpoint-*`, then `improve/*`, `chore/*`) → PR into `main` → high-effort review → fixes → merge. CI (`.github/workflows/ci.yml`) must pass. Merged branches are deleted.
 
 ## Wrap-up status (2026-11-04)

@@ -2,7 +2,7 @@
 
 > **Historical:** this was the hackathon snapshot. Since then gifts/wish quests, weather and condition spirits,
 > new-business spirits, companions, crews, trading, gatherings, 311 haze, day/night and all five mini-games
-> were built. See `.plans/long-term-progress.md` for current status.
+> were built. See `docs/plans/long-term-progress.md` for current status.
 
 Status as of the hackathon build (2026-11-03). ✅ working · ⚠️ partial · ❌ not built.
 Everything marked ✅ was exercised end to end (API + browser) before writing this.
